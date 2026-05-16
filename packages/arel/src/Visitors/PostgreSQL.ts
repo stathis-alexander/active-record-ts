@@ -25,6 +25,11 @@ import { quoteValue, ToSql } from './ToSql';
 export class PostgreSQL extends ToSql {
   private bindIndex: number = 0;
 
+  /** Reset the placeholder counter so a single visitor instance can compile multiple statements. */
+  resetBindIndex(): void {
+    this.bindIndex = 0;
+  }
+
   protected override visitBindParam(node: BindParamNode, collector: Collector) {
     this.bindIndex++;
     const idx = this.bindIndex;
