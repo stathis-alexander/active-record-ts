@@ -148,8 +148,18 @@ describe('Validations', () => {
 
   test.skip('validate using a block (TODO: validate-do-end)', () => {});
 
-  test.skip('validate! raises ValidationError (TODO: validate-bang)', () => {});
-  test.skip('validate! with context (TODO: contexts)', () => {});
+  test('validate! raises ValidationError', async () => {
+    Topic.validatesPresenceOf('title');
+    await expect(new Topic().validateOrThrow()).rejects.toThrow();
+  });
+
+  test('validate! with context', async () => {
+    Topic.validatesPresenceOf('title', { on: 'publish' });
+    const t = new Topic();
+    await expect(t.validateOrThrow('publish')).rejects.toThrow();
+    expect(await new Topic({ title: 'ok' }).validateOrThrow('publish')).toBe(true);
+  });
+
   test('validation context: array of contexts', async () => {
     Topic.validatesPresenceOf('title', { on: ['create', 'publish'] });
     const t = new Topic();
@@ -158,19 +168,49 @@ describe('Validations', () => {
     expect(await t.isValid('update')).toBe(true);
   });
 
-  test.skip('strict validation in validates (TODO: strict mode)', () => {});
-  test.skip('strict validation does not fail when valid (TODO: strict mode)', () => {});
-  test.skip('strict validation particular validator (TODO)', () => {});
-  test.skip('strict validation custom validator helper (TODO)', () => {});
-  test.skip('strict validation custom exception (TODO)', () => {});
-  test.skip('validates! bang variant (TODO)', () => {});
+  test('strict validation throws on failure', async () => {
+    const { StrictValidationFailed } = await import('../../src');
+    Topic.validatesPresenceOf('title', { strict: true });
+    await expect(new Topic().validate()).rejects.toBeInstanceOf(StrictValidationFailed);
+  });
+
+  test('strict validation does not fail when valid', async () => {
+    Topic.validatesPresenceOf('title', { strict: true });
+    expect(await new Topic({ title: 'ok' }).validate()).toBe(true);
+  });
+
+  test('strict per-validator option', async () => {
+    const { StrictValidationFailed } = await import('../../src');
+    Topic.validates('title', { presence: { strict: true } });
+    await expect(new Topic().validate()).rejects.toBeInstanceOf(StrictValidationFailed);
+  });
+
+  test('strict custom exception class', async () => {
+    class CustomStrictValidationException extends Error {}
+    Topic.validatesPresenceOf('title', { strict: CustomStrictValidationException });
+    await expect(new Topic().validate()).rejects.toBeInstanceOf(CustomStrictValidationException);
+  });
+
+  test('strict error message includes humanized attribute', async () => {
+    const { StrictValidationFailed } = await import('../../src');
+    Topic.validatesPresenceOf('title', { strict: true });
+    try {
+      await new Topic().validate();
+    } catch (err) {
+      expect(err).toBeInstanceOf(StrictValidationFailed);
+      expect((err as Error).message).toBe("Title can't be blank");
+      return;
+    }
+    throw new Error('expected throw');
+  });
+
+  test.skip('validates! class-level strict toggle (TODO: Topic.validates_bang)', () => {});
 
   test('validates with false hash value', async () => {
     Topic.validates('title', { presence: false });
     expect(await new Topic().isValid()).toBe(true);
   });
 
-  test.skip('strict validation error message (TODO)', () => {});
 
   test('does not modify options argument', async () => {
     const options = { presence: true } as const;

@@ -126,11 +126,48 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
     expect(cols.find((c) => c.name === 'email')).toBeUndefined();
   });
 
-  test.skip('rename_column (TODO: parity with SQLite renameColumn limitations)', () => {});
-  test.skip('change_column (TODO: change_column)', () => {});
-  test.skip('rename_table (TODO: rename_table)', () => {});
+  test('rename_column renames a column', async () => {
+    class Rename extends Migration {
+      static override version = '200';
+      override async up() {
+        await this.createTable('users', (t) => t.string('name'));
+        await this.renameColumn('users', 'name', 'full_name');
+      }
+    }
+    await new Migrator(adapter, [Rename]).up();
+    const cols = await adapter.columns('users');
+    expect(cols.find((c) => c.name === 'full_name')).toBeDefined();
+    expect(cols.find((c) => c.name === 'name')).toBeUndefined();
+  });
 
-  test.skip('create_table_raises_if_already_exists (TODO: detect existing)', () => {});
+  test.skip('change_column on SQLite (TODO: SQLite-specific path)', () => {});
+
+  test('rename_table renames a table', async () => {
+    class Rename extends Migration {
+      static override version = '300';
+      override async up() {
+        await this.createTable('old_name', (t) => t.string('a'));
+        await this.renameTable('old_name', 'new_name');
+      }
+    }
+    await new Migrator(adapter, [Rename]).up();
+    expect(await adapter.tableExists('new_name')).toBe(true);
+    expect(await adapter.tableExists('old_name')).toBe(false);
+  });
+
+  test('create_table with force: true recreates an existing table', async () => {
+    class Force extends Migration {
+      static override version = '400';
+      override async up() {
+        await this.createTable('forced', (t) => t.string('a'));
+        await this.createTable('forced', (t) => t.string('b'), { force: true });
+      }
+    }
+    await new Migrator(adapter, [Force]).up();
+    const cols = await adapter.columns('forced');
+    expect(cols.find((c) => c.name === 'a')).toBeUndefined();
+    expect(cols.find((c) => c.name === 'b')).toBeDefined();
+  });
   test('create_table_with_if_not_exists_true', async () => {
     class CreateIfNotExists extends Migration {
       static override version = '100';
@@ -145,9 +182,32 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
   test.skip('create_table_raises_for_long_table_names (TODO: name length policy)', () => {});
   test.skip('create_table_with_force_and_if_not_exists (TODO: force flag)', () => {});
 
-  test.skip('remove_column with if_exists set (TODO: if_exists flag)', () => {});
-  test.skip('add_column with if_not_exists (TODO: if_not_exists)', () => {});
-  test.skip('add_column with casted type if_not_exists (TODO)', () => {});
+  test('remove_column with if_exists set silently no-ops', async () => {
+    class WithIfExists extends Migration {
+      static override version = '500';
+      override async up() {
+        await this.createTable('rc', (t) => t.string('a'));
+        await this.removeColumn('rc', 'nonexistent', { ifExists: true });
+      }
+    }
+    await new Migrator(adapter, [WithIfExists]).up();
+    expect(await adapter.tableExists('rc')).toBe(true);
+  });
+
+  test('add_column with if_not_exists silently no-ops when present', async () => {
+    class WithIfNotExists extends Migration {
+      static override version = '600';
+      override async up() {
+        await this.createTable('ac', (t) => t.string('a'));
+        await this.addColumn('ac', 'a', 'string', { ifNotExists: true });
+      }
+    }
+    await new Migrator(adapter, [WithIfNotExists]).up();
+    const cols = await adapter.columns('ac');
+    expect(cols.filter((c) => c.name === 'a').length).toBe(1);
+  });
+
+  test.skip('add_column with casted type if_not_exists (TODO: type comparison)', () => {});
 
   test.skip('add_index with options (TODO: where, using, length, opclass)', () => {});
 

@@ -37,6 +37,13 @@ import {
 /** A type reference accepted by `Model.attribute` — either a name or a Type instance. */
 export type TypeRef = string | Type;
 
+/** Thrown by `Model#validateOrThrow` (mirrors Rails' `ActiveModel::ValidationError`). */
+export class ValidationError extends Error {
+  constructor(public record: Model) {
+    super(`Validation failed: ${record.errors.fullMessages.join(', ')}`);
+  }
+}
+
 const resolveType = (ref: TypeRef): Type => (typeof ref === 'string' ? lookupType(ref) : ref);
 
 /**
@@ -69,6 +76,52 @@ const getRegistry = <T extends Model>(ctor: typeof Model): Registry<T> => {
   return fresh;
 };
 
+/**
+ * Camelize a Rails-style snake_case name into a method-friendly suffix
+ * (e.g. `'first_name'` -> `'FirstName'`). Used to derive per-attribute
+ * dirty helper names like `firstNameChanged()`.
+ */
+const camelizeSuffix = (name: string): string =>
+  name.replace(/(?:^|[_-])([a-z0-9])/gi, (_, c: string) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g, '');
+
+/**
+ * Install per-attribute dirty helpers on the prototype: `nameChanged()`,
+ * `nameWas()`, `nameChange()`, `restoreName()`. Mirrors a slice of
+ * `ActiveModel::Dirty`'s generated methods.
+ */
+const definePerAttributeDirty = (target: typeof Model, names: string[]): void => {
+  for (const name of names) {
+    const suffix = camelizeSuffix(name);
+    const helpers: Record<string, (this: Model, ...args: unknown[]) => unknown> = {
+      [`${lowerFirst(suffix)}Changed`](this: Model) {
+        return this.attributeChanged(name);
+      },
+      [`${lowerFirst(suffix)}Was`](this: Model) {
+        return this.attributeWas(name);
+      },
+      [`${lowerFirst(suffix)}Change`](this: Model): [unknown, unknown] | null {
+        if (!this.attributeChanged(name)) return null;
+        return [this.attributeWas(name), this.readAttribute(name)];
+      },
+      [`restore${suffix}`](this: Model) {
+        // Reset just this one attribute to its original value.
+        this.writeAttribute(name, this.attributeWas(name));
+      },
+    };
+    for (const [methodName, fn] of Object.entries(helpers)) {
+      if (Object.prototype.hasOwnProperty.call(target.prototype, methodName)) continue;
+      Object.defineProperty(target.prototype, methodName, {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: fn,
+      });
+    }
+  }
+};
+
+const lowerFirst = (s: string): string => (s.length === 0 ? s : s.charAt(0).toLowerCase() + s.slice(1));
+
 /** Accessor proxy installed on subclass prototypes so `record.name` reads `attributes`. */
 const defineAccessors = (target: typeof Model, names: string[]): void => {
   for (const name of names) {
@@ -98,7 +151,9 @@ export class Model {
     const reg = getRegistry<this>(ctor);
     this._attributes = new Attributes(reg.attributeSet);
     this._attributes.hydrateDefaults(values);
-    defineAccessors(ctor, reg.attributeSet.keys());
+    const names = reg.attributeSet.keys();
+    defineAccessors(ctor, names);
+    definePerAttributeDirty(ctor, names);
   }
 
   // ──────────────────────────── attribute IO ────────────────────────────
@@ -160,6 +215,12 @@ export class Model {
   async isInvalid(context?: ValidationContext): Promise<boolean> {
     return !(await this.validate(context));
   }
+  /** Mirrors Rails' `validate!`. Throws when invalid, returns true otherwise. */
+  async validateOrThrow(context?: ValidationContext): Promise<boolean> {
+    const ok = await this.validate(context);
+    if (!ok) throw new ValidationError(this);
+    return true;
+  }
 
   // ──────────────────────────── helpers ────────────────────────────
 
@@ -174,6 +235,7 @@ export class Model {
     const reg = getRegistry(this);
     reg.attributeSet.define({ name, type: resolveType(type), default: options?.default });
     defineAccessors(this, [name]);
+    definePerAttributeDirty(this, [name]);
     return this;
   }
 

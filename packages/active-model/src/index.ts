@@ -12,7 +12,7 @@ export {
   type CallbackKind,
 } from './Callbacks';
 export { BASE, Errors, type ErrorEntry } from './Errors';
-export { Model, type TypeRef } from './Model';
+export { Model, ValidationError, type TypeRef } from './Model';
 export {
   AcceptanceValidator,
   AbsenceValidator,
@@ -23,6 +23,7 @@ export {
   LengthValidator,
   NumericalityValidator,
   PresenceValidator,
+  StrictValidationFailed,
   type AcceptanceOptions,
   type ConfirmationOptions,
   type ExclusionOptions,

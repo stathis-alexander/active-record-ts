@@ -51,6 +51,8 @@ export type ForeignKeyOptions = {
 export type CreateTableOptions = {
   primaryKey?: string | false;
   ifNotExists?: boolean;
+  /** Drop the existing table first (used during destructive recreations). */
+  force?: boolean;
 };
 
 export type ColumnDefinition = {

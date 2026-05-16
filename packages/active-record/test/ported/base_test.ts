@@ -149,7 +149,29 @@ describe('BasicsTest — select sugar', () => {
 });
 
 describe('BasicsTest — readonly attrs / many other features', () => {
-  test.skip('readonly attribute raises on set (TODO: attrReadonly)', () => {});
+  test('readonly attribute is preserved on update', async () => {
+    class ReadonlyTitlePost extends Post {}
+    ReadonlyTitlePost.attrReadonly('title');
+    ReadonlyTitlePost.useConnection(fx.adapter);
+    await ReadonlyTitlePost.loadSchema();
+    const p = await ReadonlyTitlePost.create({ title: 'original', body: 'b' });
+    p.writeAttribute('title', 'modified');
+    p.writeAttribute('body', 'updated body');
+    await p.save();
+    const reloaded = await ReadonlyTitlePost.find(p.id);
+    expect(reloaded.readAttribute('title')).toBe('original');
+    expect(reloaded.readAttribute('body')).toBe('updated body');
+  });
+
+  test('readonly attribute is set on insert', async () => {
+    class ReadonlyTitlePost extends Post {}
+    ReadonlyTitlePost.attrReadonly('title');
+    ReadonlyTitlePost.useConnection(fx.adapter);
+    await ReadonlyTitlePost.loadSchema();
+    const p = await ReadonlyTitlePost.create({ title: 'set-once', body: 'b' });
+    const reloaded = await ReadonlyTitlePost.find(p.id);
+    expect(reloaded.readAttribute('title')).toBe('set-once');
+  });
   test.skip('generated_association_methods_module_name (TODO: generated modules)', () => {});
   test.skip('generated_relation_methods_module_name (TODO)', () => {});
   test.skip('no_anonymous_modules (TODO)', () => {});
