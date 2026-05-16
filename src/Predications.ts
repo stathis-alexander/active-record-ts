@@ -179,6 +179,6 @@ export const Predications = <TBase extends Constructor>(Base: TBase) =>
       groupingAllNodeFactory(this, 'notIn')(others as Expression[]);
     notInAny = (others: Array<Expression | Expression[]>) =>
       groupingAnyNodeFactory(this, 'notIn')(others as Expression[]);
-    overlaps = (other: Expression | Expression[]) => new Nodes.Overlaps(this, buildQuoted(other as Expression));
+    overlaps = (other: Expression | Expression[]) => new Nodes.Overlaps(this, buildQuoted(other as Expression, this));
     when = (other: Expression) => new Nodes.Case(this).when(buildQuoted(other));
   };

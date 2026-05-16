@@ -296,9 +296,7 @@ describe('Visitors.PostgreSQL', () => {
       expect(compile(manager.ast)).toContain('UPDATE "users" SET "name" = \'hello\' RETURNING "users"."id"');
     });
 
-    it.skip('update statements with joins render RETURNING', () => {
-      // SKIP: needs PostgreSQL.visitUpdateStatement override that places JOINs in FROM clause
-      // (Rails: UPDATE "users" SET "name" = 'hello' FROM CROSS JOIN "posts" RETURNING ...)
+    it('update statements with joins render RETURNING', () => {
       const posts = new Arel.Table('posts');
       const joinSource = new Arel.Nodes.JoinSource(table, [table.createJoin(posts)]);
       const manager = new Arel.UpdateManager();

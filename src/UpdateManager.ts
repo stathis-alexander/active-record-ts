@@ -13,9 +13,9 @@ export type UpdatePair = [Attribute | Expression, Expression];
 export class UpdateManager extends TreeManagerWithStatementMethods {
   public declare ast: UpdateStatementNode;
 
-  constructor(table?: RelationLike) {
+  constructor(table?: RelationLike | JoinSourceNode | InnerJoinNode) {
     super();
-    this.ast = new Nodes.UpdateStatement(table);
+    this.ast = new Nodes.UpdateStatement(table as RelationLike);
   }
 
   /** UPDATE target — typically a `Table`, but may be a `JoinSource` or `InnerJoin` to express UPDATE...JOIN. */

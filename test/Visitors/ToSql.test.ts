@@ -883,10 +883,7 @@ describe('Visitors.ToSQL', () => {
         expect(compile(node)).toBe('( topleft UNION left UNION right )');
       });
 
-      it.skip('encloses SELECT statements with parentheses', () => {
-        // SKIP: needs visitUnion to wrap nested SelectStatementNode operands in
-        // parentheses (Rails: "(...LIMIT 1) UNION (...LIMIT 1)" — current output
-        // is unparenthesized "...LIMIT 1 UNION ...").
+      it('encloses SELECT statements with parentheses', () => {
         const left = table.where(table.attribute('name').equal(0)).take(1).ast;
         const right = table.where(table.attribute('name').equal(1)).take(1).ast;
         const node = new Arel.Nodes.Union(left, right);
@@ -905,10 +902,7 @@ describe('Visitors.ToSQL', () => {
         expect(compile(node)).toBe('( topleft UNION ALL left UNION ALL right )');
       });
 
-      it.skip('encloses SELECT statements with parentheses', () => {
-        // SKIP: needs visitUnionAll to wrap nested SelectStatementNode operands in
-        // parentheses (Rails: "(...LIMIT 1) UNION ALL (...LIMIT 1)" — current
-        // output is unparenthesized).
+      it('encloses SELECT statements with parentheses', () => {
         const left = table.where(table.attribute('name').equal(0)).take(1).ast;
         const right = table.where(table.attribute('name').equal(1)).take(1).ast;
         const node = new Arel.Nodes.UnionAll(left, right);

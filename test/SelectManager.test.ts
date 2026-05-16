@@ -167,10 +167,9 @@ describe('SelectManager', () => {
       // FIXME this probably shouldn't return a node
       const node = m1.intersect(m2);
 
-      // maybe FIXME: decide when wrapper parens are needed
       assertLike(
         node.toSql(),
-        '( SELECT * FROM "users"  WHERE "users"."age" > 18 INTERSECT SELECT * FROM "users"  WHERE "users"."age" < 99 )',
+        '( (SELECT * FROM "users" WHERE "users"."age" > 18) INTERSECT (SELECT * FROM "users" WHERE "users"."age" < 99) )',
       );
     });
   });
@@ -388,10 +387,9 @@ describe('SelectManager', () => {
       // FIXME this probably shouldn't return a node
       const node = m1.union(m2);
 
-      // maybe FIXME: decide when wrapper parens are needed
       assertLike(
         node.toSql(),
-        '( SELECT * FROM "users"  WHERE "users"."age" < 18 UNION SELECT * FROM "users"  WHERE "users"."age" > 99 )',
+        '( (SELECT * FROM "users" WHERE "users"."age" < 18) UNION (SELECT * FROM "users" WHERE "users"."age" > 99) )',
       );
     });
 
@@ -400,7 +398,7 @@ describe('SelectManager', () => {
       const node = m1.unionAll(m2);
       assertLike(
         node.toSql(),
-        '( SELECT * FROM "users"  WHERE "users"."age" < 18 UNION ALL SELECT * FROM "users"  WHERE "users"."age" > 99 )',
+        '( (SELECT * FROM "users" WHERE "users"."age" < 18) UNION ALL (SELECT * FROM "users" WHERE "users"."age" > 99) )',
       );
     });
   });
@@ -419,7 +417,7 @@ describe('SelectManager', () => {
       const node = m1.except(m2);
       assertLike(
         node.toSql(),
-        '( SELECT * FROM "users" WHERE "users"."age" BETWEEN 18 AND 60 EXCEPT SELECT * FROM "users" WHERE "users"."age" BETWEEN 40 AND 99 )',
+        '( (SELECT * FROM "users" WHERE "users"."age" BETWEEN 18 AND 60) EXCEPT (SELECT * FROM "users" WHERE "users"."age" BETWEEN 40 AND 99) )',
       );
     });
   });
@@ -470,7 +468,7 @@ describe('SelectManager', () => {
 
       assertLike(
         manager.toSql(),
-        'WITH RECURSIVE "replies" AS ( SELECT "comments"."id", "comments"."parent_id" FROM "comments" WHERE "comments"."id" = 42 UNION SELECT "comments"."id", "comments"."parent_id" FROM "comments" INNER JOIN "replies" ON "comments"."parent_id" = "replies"."id" ) SELECT * FROM "replies"',
+        'WITH RECURSIVE "replies" AS ( (SELECT "comments"."id", "comments"."parent_id" FROM "comments" WHERE "comments"."id" = 42) UNION (SELECT "comments"."id", "comments"."parent_id" FROM "comments" INNER JOIN "replies" ON "comments"."parent_id" = "replies"."id") ) SELECT * FROM "replies"',
       );
     });
   });
@@ -559,12 +557,10 @@ describe('SelectManager', () => {
   });
 
   describe('createInsert / createJoin', () => {
-    it.skip('should create insert managers', () => {
-      // SKIP: needs SelectManager#createInsert (FactoryMethods has no createInsert).
+    it('should create insert managers', () => {
       const relation = new Arel.SelectManager();
-      // const insert = relation.createInsert();
-      // expect(insert).toBeInstanceOf(Arel.InsertManager);
-      expect(relation).toBeDefined();
+      const insert = relation.createInsert();
+      expect(insert).toBeInstanceOf(Arel.InsertManager);
     });
 
     it('should create join nodes', () => {
@@ -827,74 +823,201 @@ describe('SelectManager', () => {
       );
     });
 
-    // SKIP: ToSql visitor has no visitRows/visitRange/visitPreceding/visitFollowing/visitCurrentRow
-    // methods, so frame nodes can't be rendered. All 12 rows/range frame tests below depend on
-    // those visitor methods. See `src/Visitors/ToSql.ts` visitWindow.
-    it.skip('takes a rows frame, unbounded preceding', () => {});
-    it.skip('takes a rows frame, bounded preceding', () => {});
-    it.skip('takes a rows frame, unbounded following', () => {});
-    it.skip('takes a rows frame, bounded following', () => {});
-    it.skip('takes a rows frame, current row', () => {});
-    it.skip('takes a rows frame, between two delimiters', () => {});
-    it.skip('takes a range frame, unbounded preceding', () => {});
-    it.skip('takes a range frame, bounded preceding', () => {});
-    it.skip('takes a range frame, unbounded following', () => {});
-    it.skip('takes a range frame, bounded following', () => {});
-    it.skip('takes a range frame, current row', () => {});
-    it.skip('takes a range frame, between two delimiters', () => {});
+    it('takes a rows frame, unbounded preceding', () => {
+      const { table, manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Preceding());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS UNBOUNDED PRECEDING)');
+      void table;
+    });
+    it('takes a rows frame, bounded preceding', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Preceding(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS 5 PRECEDING)');
+    });
+    it('takes a rows frame, unbounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Following());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS UNBOUNDED FOLLOWING)');
+    });
+    it('takes a rows frame, bounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Following(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS 5 FOLLOWING)');
+    });
+    it('takes a rows frame, current row', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.CurrentRow());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS CURRENT ROW)');
+    });
+    it('takes a rows frame, between two delimiters', () => {
+      const { manager } = setup();
+      const window = manager.window('a_window');
+      window.frame(
+        new Arel.Nodes.Between(
+          window.rows(),
+          new Arel.Nodes.And([new Arel.Nodes.Preceding(), new Arel.Nodes.CurrentRow()]),
+        ),
+      );
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" WINDOW "a_window" AS (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)',
+      );
+    });
+    it('takes a range frame, unbounded preceding', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Preceding());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE UNBOUNDED PRECEDING)');
+    });
+    it('takes a range frame, bounded preceding', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Preceding(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE 5 PRECEDING)');
+    });
+    it('takes a range frame, unbounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Following());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE UNBOUNDED FOLLOWING)');
+    });
+    it('takes a range frame, bounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Following(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE 5 FOLLOWING)');
+    });
+    it('takes a range frame, current row', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.CurrentRow());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE CURRENT ROW)');
+    });
+    it('takes a range frame, between two delimiters', () => {
+      const { manager } = setup();
+      const window = manager.window('a_window');
+      window.frame(
+        new Arel.Nodes.Between(
+          window.range(),
+          new Arel.Nodes.And([new Arel.Nodes.Preceding(), new Arel.Nodes.CurrentRow()]),
+        ),
+      );
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" WINDOW "a_window" AS (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)',
+      );
+    });
   });
 
   describe('delete', () => {
-    it.skip('copies from', () => {
-      // SKIP: needs SelectManager#compileDelete to produce a DELETE statement from the current FROM/WHERE.
+    it('copies from', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      const stmt = manager.compileDelete();
+      assertLike(stmt.toSql(), 'DELETE FROM "users"');
     });
 
-    it.skip('copies where', () => {
-      // SKIP: needs SelectManager#compileDelete.
+    it('copies where', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      const stmt = manager.compileDelete();
+      assertLike(stmt.toSql(), 'DELETE FROM "users" WHERE "users"."id" = 10');
     });
   });
 
   describe('where_sql', () => {
-    it.skip('gives me back the where sql', () => {
-      // SKIP: needs SelectManager#whereSql.
+    it('gives me back the where sql', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      assertLike(String(manager.whereSql()), 'WHERE "users"."id" = 10');
     });
 
-    it.skip('joins wheres with AND', () => {
-      // SKIP: needs SelectManager#whereSql.
+    it('joins wheres with AND', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      manager.where(table.attribute('id').equal(11));
+      assertLike(String(manager.whereSql()), 'WHERE "users"."id" = 10 AND "users"."id" = 11');
     });
 
     it.skip('handles database-specific statements', () => {
-      // SKIP: needs SelectManager#whereSql (with visitor override).
+      // SKIP: needs whereSql to accept a visitor instance (Rails passes the engine's
+      // connection visitor — PostgreSQL — so MATCHES renders ILIKE). The current
+      // whereSql always uses ToSql. Plumbing the engine/visitor through is non-trivial.
     });
 
-    it.skip('returns nil when there are no wheres', () => {
-      // SKIP: needs SelectManager#whereSql.
+    it('returns nil when there are no wheres', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      expect(manager.whereSql()).toBeNull();
     });
   });
 
   describe('update', () => {
-    it.skip('creates an update statement', () => {
-      // SKIP: needs SelectManager#compileUpdate.
+    it('creates an update statement', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      const stmt = manager.compileUpdate([[table.attribute('id'), 1]], table.attribute('id'));
+      assertLike(stmt.toSql(), 'UPDATE "users" SET "id" = 1');
     });
 
-    it.skip('takes a string', () => {
-      // SKIP: needs SelectManager#compileUpdate.
+    it('takes a string', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      const stmt = manager.compileUpdate(new Arel.Nodes.SqlLiteral('foo = bar'), table.attribute('id'));
+      assertLike(stmt.toSql(), 'UPDATE "users" SET foo = bar');
     });
 
-    it.skip('copies limits', () => {
-      // SKIP: needs SelectManager#compileUpdate.
+    it('copies limits', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.take(1);
+      const stmt = manager.compileUpdate(new Arel.Nodes.SqlLiteral('foo = bar'), table.attribute('id'));
+      stmt.key = table.attribute('id');
+      assertLike(
+        stmt.toSql(),
+        'UPDATE "users" SET foo = bar WHERE ("users"."id") IN (SELECT "users"."id" FROM "users" LIMIT 1)',
+      );
     });
 
-    it.skip('copies order', () => {
-      // SKIP: needs SelectManager#compileUpdate.
+    it('copies order', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.order('foo');
+      const stmt = manager.compileUpdate(new Arel.Nodes.SqlLiteral('foo = bar'), table.attribute('id'));
+      stmt.key = table.attribute('id');
+      assertLike(
+        stmt.toSql(),
+        'UPDATE "users" SET foo = bar WHERE ("users"."id") IN (SELECT "users"."id" FROM "users" ORDER BY foo)',
+      );
     });
 
-    it.skip('copies where clauses', () => {
-      // SKIP: needs SelectManager#compileUpdate.
+    it('copies where clauses', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.where(table.attribute('id').equal(10));
+      manager.from(table);
+      const stmt = manager.compileUpdate([[table.attribute('id'), 1]], table.attribute('id'));
+      assertLike(stmt.toSql(), 'UPDATE "users" SET "id" = 1 WHERE "users"."id" = 10');
     });
 
-    it.skip('copies where clauses when nesting is triggered', () => {
-      // SKIP: needs SelectManager#compileUpdate.
+    it('copies where clauses when nesting is triggered', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.where(table.attribute('foo').equal(10));
+      manager.take(42);
+      manager.from(table);
+      const stmt = manager.compileUpdate([[table.attribute('id'), 1]], table.attribute('id'));
+      assertLike(
+        stmt.toSql(),
+        'UPDATE "users" SET "id" = 1 WHERE ("users"."id") IN (SELECT "users"."id" FROM "users" WHERE "users"."foo" = 10 LIMIT 42)',
+      );
     });
   });
 
@@ -974,12 +1097,17 @@ describe('SelectManager', () => {
   });
 
   describe('comment', () => {
-    it.skip('chains', () => {
-      // SKIP: needs SelectManager#comment.
+    it('chains', () => {
+      const manager = new Arel.SelectManager();
+      expect(manager.comment('selecting')).toBe(manager);
     });
 
-    it.skip('appends a comment to the generated query', () => {
-      // SKIP: needs SelectManager#comment.
+    it('appends a comment to the generated query', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table).project(table.attribute('id'));
+      manager.comment('selecting');
+      assertLike(manager.toSql(), 'SELECT "users"."id" FROM "users" /* selecting */');
     });
   });
 });

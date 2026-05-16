@@ -825,7 +825,7 @@ describe('attribute', () => {
       const union = mgr1.union(mgr2);
       const mgr = relation.project(relation.attribute('id').in(union));
       expect(mgr.toSql()).toMatch(
-        '"users"."id" IN (( SELECT "users"."id" FROM "users" UNION SELECT "users"."id" FROM "users" ))',
+        '"users"."id" IN (( (SELECT "users"."id" FROM "users") UNION (SELECT "users"."id" FROM "users") ))',
       );
     });
 
@@ -926,7 +926,7 @@ describe('attribute', () => {
       const union = mgr1.union(mgr2);
       const mgr = relation.project(relation.attribute('id').notIn(union));
       expect(mgr.toSql()).toMatch(
-        '"users"."id" NOT IN (( SELECT "users"."id" FROM "users" UNION SELECT "users"."id" FROM "users" ))',
+        '"users"."id" NOT IN (( (SELECT "users"."id" FROM "users") UNION (SELECT "users"."id" FROM "users") ))',
       );
     });
 
@@ -1066,10 +1066,7 @@ describe('attribute', () => {
       expect(node.operator).toBe('&&');
     });
 
-    it.skip('should generate && in sql', () => {
-      // SKIP: needs Predications.overlaps to pass `this` to buildQuoted (currently
-      // buildQuoted(other) — drops the attribute, so the table's typeCaster is
-      // never consulted and the array value falls through JSON-encoding instead).
+    it('should generate && in sql', () => {
       const relation = new Arel.Table('products', { typeCaster: fakePgCaster });
       const mgr = relation.project(relation.attribute('id'));
       mgr.where(relation.attribute('tags').overlaps(['foo', 'bar']));

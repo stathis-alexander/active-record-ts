@@ -18,6 +18,7 @@ import type {
   CommentNode,
   CountNode,
   CteNode,
+  CurrentRowNode,
   DeleteStatementNode,
   DescendingNode,
   DistinctNode,
@@ -30,6 +31,7 @@ import type {
   ExtractNode,
   FalseNode,
   FilterNode,
+  FollowingNode,
   FragmentsNode,
   FullOuterJoinNode,
   FunctionNode,
@@ -63,8 +65,11 @@ import type {
   OrNode,
   OuterJoinNode,
   OverNode,
+  PrecedingNode,
   QuotedNode,
+  RangeNode,
   RightOuterJoinNode,
+  RowsNode,
   SelectCoreNode,
   SelectStatementNode,
   SqlLiteralNode,
@@ -931,36 +936,90 @@ export class ToSql extends Visitor {
   protected visitUpdateStatement(node: UpdateStatementNode, collector: Collector) {
     collector.retryable = false;
     collector.preparable = false;
+    const prepared = this.prepareUpdateStatement(node);
     collector.collect('UPDATE ');
-    collector = this.visit(node.relation, collector);
+    collector = this.visit(prepared.relation, collector);
 
-    if (node.values.length > 0) {
+    if (prepared.values.length > 0) {
       collector.collect(' SET ');
-      this.injectJoin(node.values, collector, ', ');
+      this.injectJoin(prepared.values, collector, ', ');
     }
 
-    if (node.wheres.length > 0) {
+    if (prepared.wheres.length > 0) {
       collector.collect(' WHERE ');
-      this.injectJoin(node.wheres, collector, ' AND ');
+      this.injectJoin(prepared.wheres, collector, ' AND ');
     }
 
-    if (node.groups && node.groups.length > 0) {
+    if (prepared.groups && prepared.groups.length > 0) {
       collector.collect(' GROUP BY ');
-      this.injectJoin(node.groups, collector, ', ');
+      this.injectJoin(prepared.groups, collector, ', ');
     }
 
-    if (node.havings && node.havings.length > 0) {
+    if (prepared.havings && prepared.havings.length > 0) {
       collector.collect(' HAVING ');
-      this.injectJoin(node.havings, collector, ' AND ');
+      this.injectJoin(prepared.havings, collector, ' AND ');
     }
 
-    if (node.orders && node.orders.length > 0) {
+    if (prepared.orders && prepared.orders.length > 0) {
       collector.collect(' ORDER BY ');
-      this.injectJoin(node.orders, collector, ', ');
+      this.injectJoin(prepared.orders, collector, ', ');
     }
 
-    collector = this.maybeVisit(node.limit, collector);
-    return this.collectReturning(node.returning, collector);
+    collector = this.maybeVisit(prepared.limit, collector);
+    collector = this.maybeVisit(prepared.comment, collector);
+    return this.collectReturning(prepared.returning, collector);
+  }
+
+  /**
+   * If the UPDATE has a `key` and either limits/orders/offset or joined
+   * sources, rewrite it as `UPDATE ... WHERE (key) IN (SELECT key ...)`.
+   * Mirrors Rails' `prepare_update_statement`.
+   */
+  protected prepareUpdateStatement(node: UpdateStatementNode): UpdateStatementNode {
+    if (node.key && (this.hasLimitOrOffsetOrOrders(node) || this.hasJoinSources(node))) {
+      const stmt = Object.assign(new Nodes.UpdateStatement(), node);
+      stmt.limit = null;
+      stmt.offset = null;
+      stmt.orders = [];
+      const columns = new Nodes.Grouping(node.key);
+      stmt.wheres = [new Nodes.In(columns, [this.buildSubselect(node.key, node)])];
+      if (this.hasJoinSources(node)) {
+        const rel = node.relation as { left?: unknown };
+        stmt.relation = (rel.left ?? null) as UpdateStatementNode['relation'];
+      }
+      if (node.groups && node.groups.length > 0) stmt.groups = node.groups;
+      if (node.havings && node.havings.length > 0) stmt.havings = node.havings;
+      return stmt;
+    }
+    return node;
+  }
+
+  protected hasJoinSources(node: { relation: unknown }): boolean {
+    const rel = node.relation as unknown;
+    return (
+      rel instanceof Nodes.JoinSource &&
+      Array.isArray((rel as { right: unknown[] }).right) &&
+      (rel as { right: unknown[] }).right.length > 0
+    );
+  }
+
+  protected hasLimitOrOffsetOrOrders(node: { limit?: unknown; offset?: unknown; orders?: unknown[] }): boolean {
+    return Boolean(node.limit) || Boolean(node.offset) || (Array.isArray(node.orders) && node.orders.length > 0);
+  }
+
+  protected buildSubselect(key: Expression, source: UpdateStatementNode): SelectStatementNode {
+    const stmt = new Nodes.SelectStatement();
+    const core = stmt.cores[0] as SelectCoreNode;
+    core.from = source.relation as unknown as SelectCoreNode['from'];
+    core.source.left = source.relation as unknown as typeof core.source.left;
+    core.wheres = source.wheres;
+    core.projections = [key];
+    if (source.groups && source.groups.length > 0) core.groups = source.groups;
+    if (source.havings && source.havings.length > 0) core.havings = source.havings;
+    stmt.limit = source.limit;
+    stmt.offset = source.offset;
+    stmt.orders = source.orders;
+    return stmt;
   }
 
   protected visitValuesList(node: ValuesListNode, collector: Collector) {
@@ -982,6 +1041,47 @@ export class ToSql extends Visitor {
       });
       collector.collect(')');
     });
+    return collector;
+  }
+
+  protected visitRows(node: RowsNode, collector: Collector) {
+    if (node.expression != null) {
+      collector.collect('ROWS ');
+      return this.visit(node.expression, collector);
+    }
+    collector.collect('ROWS');
+    return collector;
+  }
+
+  protected visitRange(node: RangeNode, collector: Collector) {
+    if (node.expression != null) {
+      collector.collect('RANGE ');
+      return this.visit(node.expression, collector);
+    }
+    collector.collect('RANGE');
+    return collector;
+  }
+
+  protected visitPreceding(node: PrecedingNode, collector: Collector) {
+    if (node.expression != null) {
+      collector = this.visit(node.expression, collector);
+    } else {
+      collector.collect('UNBOUNDED');
+    }
+    return collector.collect(' PRECEDING');
+  }
+
+  protected visitFollowing(node: FollowingNode, collector: Collector) {
+    if (node.expression != null) {
+      collector = this.visit(node.expression, collector);
+    } else {
+      collector.collect('UNBOUNDED');
+    }
+    return collector.collect(' FOLLOWING');
+  }
+
+  protected visitCurrentRow(_node: CurrentRowNode, collector: Collector) {
+    collector.collect('CURRENT ROW');
     return collector;
   }
 
@@ -1091,7 +1191,7 @@ export class ToSql extends Visitor {
     if (sameKind(left)) {
       collector = this.infixValueWithParen(left, collector, value, true);
     } else {
-      collector = this.visit(node.left, collector);
+      collector = this.groupingParentheses(node.left, collector);
     }
 
     collector.collect(value);
@@ -1099,11 +1199,22 @@ export class ToSql extends Visitor {
     if (sameKind(right)) {
       collector = this.infixValueWithParen(right, collector, value, true);
     } else {
-      collector = this.visit(node.right, collector);
+      collector = this.groupingParentheses(node.right, collector);
     }
 
     if (!suppressParens) collector.collect(' )');
     return collector;
+  }
+
+  /** Wrap a `SelectStatement` operand of a set-op (UNION/INTERSECT/EXCEPT) in parentheses. */
+  protected groupingParentheses(node: unknown, collector: Collector) {
+    if (node instanceof Nodes.SelectStatement) {
+      collector.collect('(');
+      collector = this.visit(node, collector);
+      collector.collect(')');
+      return collector;
+    }
+    return this.visit(node, collector);
   }
 
   protected injectJoin(nodes: Expression[], collector: Collector, joinString: string) {

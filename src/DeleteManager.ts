@@ -1,14 +1,15 @@
 import { Nodes } from './Nodes';
 import type { CommentNode } from './Nodes/Comment';
+import type { JoinSourceNode } from './Nodes/JoinSource';
 import { TreeManagerWithStatementMethods } from './TreeManager';
 import type { DeleteStatementNode, Expression, RelationLike } from './types';
 
 export class DeleteManager extends TreeManagerWithStatementMethods {
   public declare ast: DeleteStatementNode;
 
-  constructor(table?: RelationLike | null) {
+  constructor(table?: RelationLike | JoinSourceNode | null) {
     super();
-    this.ast = new Nodes.DeleteStatement(table ?? null);
+    this.ast = new Nodes.DeleteStatement((table as RelationLike) ?? null);
   }
 
   from = (relation: RelationLike) => {

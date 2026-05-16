@@ -1,6 +1,9 @@
+import { Collectors } from './Collectors';
+import { DeleteManager } from './DeleteManager';
 import { EmptyJoinError } from './errors';
 import { Nodes } from './Nodes';
 import type { JoinNode } from './Nodes/Binary';
+import type { JoinSourceNode } from './Nodes/JoinSource';
 import type { SelectCoreNode } from './Nodes/SelectCore';
 import type { SqlLiteralNode } from './Nodes/SqlLiteral';
 import type { TableAliasNode } from './Nodes/TableAlias';
@@ -9,8 +12,10 @@ import type { NamedWindowNode } from './Nodes/Window';
 import { Table } from './Table';
 import { TreeManager } from './TreeManager';
 import type { Expression, JoinType, RelationLike, SelectStatementNode } from './types';
+import { UpdateManager } from './UpdateManager';
 import { lastOrThrow } from './utilities/array';
 import { collapse, Join } from './utilities/nodes';
+import { ToSql } from './Visitors/ToSql';
 
 /**
  * If the expression is a node that wraps a primitive value (like a `Quoted`
@@ -213,5 +218,64 @@ export class SelectManager extends TreeManager {
       return new Nodes.TableAlias(lateralNode, new Nodes.SqlLiteral(tableName));
     }
     return lateralNode;
+  };
+
+  get source(): JoinSourceNode {
+    return this.ctx().source;
+  }
+
+  comment = (value: string) => {
+    this.ctx().comment = new Nodes.Comment([value]);
+    return this;
+  };
+
+  /**
+   * Render the WHERE clause as a `SqlLiteral`, joining multiple wheres with
+   * AND. Returns `null` when there are no wheres. Mirrors Rails' `where_sql`.
+   */
+  whereSql = (engine?: unknown): SqlLiteralNode | null => {
+    const wheres = this.ctx().wheres;
+    if (wheres.length === 0) return null;
+    void engine; // Currently unused — kept for parity with Rails' signature.
+    const visitor = new ToSql();
+    const collector = new Collectors.SqlString();
+    const andNode = new Nodes.And(wheres);
+    const sql = visitor.accept(andNode, collector).value();
+    return new Nodes.SqlLiteral(`WHERE ${sql}`);
+  };
+
+  /**
+   * Build an `UpdateManager` from this SELECT — copies WHERE / ORDER /
+   * LIMIT / OFFSET / GROUP / HAVING / comment. Mirrors Rails' `compile_update`.
+   */
+  compileUpdate = (values: Parameters<UpdateManager['set']>[0], key?: Expression) => {
+    const um = new UpdateManager(this.source);
+    um.set(values);
+    um.take(this.limit());
+    um.offset(this.offset());
+    um.order(...this.orders());
+    um.wheres(this.constraints());
+    um.comment(this.ctx().comment);
+    if (key != null) um.key = key;
+    um.ast.groups = this.ctx().groups;
+    this.ctx().havings.forEach((h) => um.having(h));
+    return um;
+  };
+
+  /**
+   * Build a `DeleteManager` from this SELECT — copies WHERE / ORDER /
+   * LIMIT / OFFSET / GROUP / HAVING / comment. Mirrors Rails' `compile_delete`.
+   */
+  compileDelete = (key?: Expression) => {
+    const dm = new DeleteManager(this.source);
+    dm.take(this.limit());
+    dm.offset(this.offset());
+    dm.order(...this.orders());
+    dm.wheres(this.constraints());
+    dm.comment(this.ctx().comment);
+    if (key != null) dm.key = key;
+    dm.ast.groups = this.ctx().groups;
+    this.ctx().havings.forEach((h) => dm.having(h));
+    return dm;
   };
 }

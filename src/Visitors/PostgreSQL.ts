@@ -1,6 +1,7 @@
 import type { Collector } from '../Collectors/types';
 import { Nodes } from '../Nodes';
 import type { ContainsNode, OverlapsNode } from '../Nodes/InfixOperation';
+import type { InnerJoinNode } from '../Nodes/InnerJoin';
 import type {
   BindParamNode,
   CubeNode,
@@ -17,6 +18,7 @@ import type {
   RollUpNode,
   SelectCoreNode,
   SelectStatementNode,
+  UpdateStatementNode,
 } from '../types';
 import { quoteValue, ToSql } from './ToSql';
 
@@ -82,6 +84,52 @@ export class PostgreSQL extends ToSql {
     this.collectNodesFor(node.windows, collector, ' WINDOW ');
 
     return this.maybeVisit(node.comment, collector);
+  }
+
+  protected override visitInnerJoin(node: InnerJoinNode, collector: Collector) {
+    if (node.right) return super.visitInnerJoin(node, collector);
+    collector.collect('CROSS JOIN ');
+    return this.visit(node.left, collector);
+  }
+
+  protected override visitUpdateStatement(node: UpdateStatementNode, collector: Collector) {
+    collector.retryable = false;
+    collector.preparable = false;
+    const prepared = this.prepareUpdateStatement(node);
+    collector.collect('UPDATE ');
+
+    // UPDATE with JOIN renders as:
+    //   UPDATE t1 SET ... FROM t2 JOIN ... WHERE ...
+    if (this.hasJoinSources(prepared)) {
+      const relation = prepared.relation as { left: unknown; right: unknown[] };
+      collector = this.visit(relation.left, collector);
+      if (prepared.values.length > 0) {
+        collector.collect(' SET ');
+        this.injectJoin(prepared.values as Expression[], collector, ', ');
+      }
+      collector.collect(' FROM ');
+      this.injectJoin(relation.right as Expression[], collector, ' ');
+    } else {
+      collector = this.visit(prepared.relation, collector);
+      if (prepared.values.length > 0) {
+        collector.collect(' SET ');
+        this.injectJoin(prepared.values, collector, ', ');
+      }
+    }
+
+    if (prepared.wheres.length > 0) {
+      collector.collect(' WHERE ');
+      this.injectJoin(prepared.wheres, collector, ' AND ');
+    }
+
+    if (prepared.orders && prepared.orders.length > 0) {
+      collector.collect(' ORDER BY ');
+      this.injectJoin(prepared.orders, collector, ', ');
+    }
+
+    collector = this.maybeVisit(prepared.limit, collector);
+    collector = this.maybeVisit(prepared.comment, collector);
+    return this.collectReturning(prepared.returning, collector);
   }
 
   protected override visitMatches(node: MatchesNode, collector: Collector) {

@@ -30,15 +30,17 @@ class FakeCrudder extends Arel.SelectManager {
     return im;
   };
 
-  compileUpdate = (values: UpdatePair[], key: Attribute) => {
+  override compileUpdate = (values: Parameters<Arel.UpdateManager['set']>[0], key?: Attribute | unknown) => {
     const um = new Arel.UpdateManager();
     um.table(this.ast.froms[0] as RelationLike);
-    um.set(values);
-    um.key = key.name;
+    um.set(values as UpdatePair[]);
+    if (key && typeof key === 'object' && 'name' in key) {
+      um.key = (key as Attribute).name as unknown as never;
+    }
     return um;
   };
 
-  compileDelete = () => {
+  override compileDelete = () => {
     const dm = new Arel.DeleteManager();
     dm.from(this.ast.froms[0] as RelationLike);
     return dm;

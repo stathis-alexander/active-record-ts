@@ -8,12 +8,28 @@ export class CurrentRowNode extends Node {
   override hash = () => hash(CurrentRowNode.name);
 }
 
-export class RowsNode extends UnaryNode {}
-export class RangeNode extends UnaryNode {}
-export class PrecedingNode extends UnaryNode {}
-export class FollowingNode extends UnaryNode {}
+export class RowsNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
+export class RangeNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
+export class PrecedingNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
+export class FollowingNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
 
-type Framing = RowsNode | RangeNode | null;
+type Framing = Node | null;
 
 export class WindowNode extends Node {
   public orders: Expression[];
@@ -54,16 +70,16 @@ export class WindowNode extends Node {
     return expression;
   };
 
-  rows = (expression: ExpressionType) => {
-    if (this.framing) return new RowsNode(expression);
+  rows = (expression?: ExpressionType) => {
+    if (this.framing) return new RowsNode(expression ?? null);
 
-    return this.frame(new RowsNode(expression));
+    return this.frame(new RowsNode(expression ?? null));
   };
 
-  range = (expression: ExpressionType) => {
-    if (this.framing) return new RangeNode(expression);
+  range = (expression?: ExpressionType) => {
+    if (this.framing) return new RangeNode(expression ?? null);
 
-    return this.frame(new RangeNode(expression));
+    return this.frame(new RangeNode(expression ?? null));
   };
 
   override hash() {

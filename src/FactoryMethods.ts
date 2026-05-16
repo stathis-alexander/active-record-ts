@@ -11,6 +11,11 @@ export class FactoryMethods {
     return new joinNodeClass(to, constraint);
   };
   createStringJoin = (to: Expression) => new Nodes.StringJoin(to, undefined);
+  createInsert = () => {
+    // Lazy require avoids a circular import: InsertManager -> TreeManager -> FactoryMethods.
+    const { InsertManager } = require('./InsertManager') as typeof import('./InsertManager');
+    return new InsertManager();
+  };
   createAnd = (clauses: Expression[]) => new Nodes.And(clauses);
   createOn = (expr: Expression) => new Nodes.On(expr);
   grouping = (expr: Expression) => new Nodes.Grouping(expr);
