@@ -1,0 +1,23 @@
+{
+  "name": "@arelts/arel",
+  "version": "1.0.0",
+  "description": "ArelTS is a TypeScript library for building SQL queries in a programmatic way. Heavily based on Rails's Arel library.",
+  "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
+  "license": "MIT",
+  "type": "module",
+  "module": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun tsc --noEmit"
+  }
+}

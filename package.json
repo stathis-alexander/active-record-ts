@@ -1,33 +1,31 @@
 {
+  "name": "arelts-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for arel, active-model, and active-record TypeScript ports of the Rails libraries.",
   "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
-  "description": "ArelTS is a JavaScript library for building SQL queries in a programmatic way. It is heavily based on Rails's Arel library.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": ["packages/*"],
   "devDependencies": {
     "@types/bun": "latest",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5"
   },
-  "license": "MIT",
-  "lint-staged": {
-    "*.{ts,tsx,json,jsonc}": [
-      "biome check --write"
-    ]
-  },
-  "module": "src/index.ts",
-  "name": "arelts",
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
-    }
-  },
   "peerDependencies": {
     "typescript": "^5"
   },
+  "lint-staged": {
+    "*.{ts,tsx,json,jsonc}": ["biome check --write"]
+  },
   "scripts": {
     "lint": "biome check",
-    "typecheck": "bun tsc --noEmit"
-  },
-  "type": "module",
-  "version": "1.0.0"
+    "typecheck": "bun tsc --noEmit",
+    "test": "bun test",
+    "test:arel": "bun test --cwd packages/arel",
+    "test:active-model": "bun test --cwd packages/active-model",
+    "test:active-record": "bun test --cwd packages/active-record",
+    "db:up": "docker compose -f docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f docker/docker-compose.yml down -v"
+  }
 }
