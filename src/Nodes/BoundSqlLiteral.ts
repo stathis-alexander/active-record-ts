@@ -1,19 +1,21 @@
 import { BindError } from '../errors';
 import { NodeExpression } from '../NodeExpression';
+import type { BindValue, NamedBinds } from '../types';
 import { hash } from '../utilities/hash';
 
-const POSITIONAL_PLACEHOLDER = new RegExp(/\?/g);
-const NAMED_PLACEHOLDERS = new RegExp(/:(?<!::)([a-zA-Z]\w*)/g);
-
-type PositionalBindsType = any[] | null;
-type NamedBindsType = Record<string, any> | null;
+const POSITIONAL_PLACEHOLDER = /\?/g;
+const NAMED_PLACEHOLDERS = /(?<!::):([a-zA-Z]\w*)/g;
 
 export class BoundSqlLiteralNode extends NodeExpression {
   public sqlWithPlaceHolders: string;
-  public positionalBinds: PositionalBindsType;
-  public namedBinds: NamedBindsType;
+  public positionalBinds: BindValue[] | null;
+  public namedBinds: NamedBinds | null;
 
-  constructor(sqlWithPlaceHolders: string, positionalBinds: PositionalBindsType = [], namedBinds: NamedBindsType = {}) {
+  constructor(
+    sqlWithPlaceHolders: string,
+    positionalBinds: BindValue[] | null = [],
+    namedBinds: NamedBinds | null = {},
+  ) {
     super();
 
     const hasPositional = positionalBinds != null && positionalBinds.length > 0;
@@ -25,21 +27,23 @@ export class BoundSqlLiteralNode extends NodeExpression {
       const expectedPositionalBinds = (sqlWithPlaceHolders.match(POSITIONAL_PLACEHOLDER) ?? []).length;
       if (positionalBinds.length !== expectedPositionalBinds) {
         throw new BindError(
-          `wrong number of bind variables (${positionalBinds.length} for ${expectedPositionalBinds})"`,
+          `wrong number of bind variables (${positionalBinds.length} for ${expectedPositionalBinds})`,
           sqlWithPlaceHolders,
         );
       }
-    } else if (hasNamed) {
-      const tokensInString = (sqlWithPlaceHolders.match(NAMED_PLACEHOLDERS) ?? []).map((match) => match.slice(1));
+    }
 
-      const tokensInHash = Object.keys(namedBinds);
-
-      const matchingTokens = tokensInString.filter((token) => tokensInHash.includes(token));
-      if (matchingTokens.length !== tokensInHash.length) {
-        throw new BindError(
-          `missing named bind variables (${tokensInHash.filter((token) => !matchingTokens.includes(token)).join(', ')})`,
-          sqlWithPlaceHolders,
-        );
+    // For named binds: validate that all named placeholders in SQL have a corresponding bind
+    const tokensInString = Array.from(sqlWithPlaceHolders.matchAll(NAMED_PLACEHOLDERS), (m) => m[1] as string);
+    const requestedTokens = new Set(tokensInString);
+    if (requestedTokens.size > 0) {
+      const providedKeys = new Set(namedBinds ? Object.keys(namedBinds) : []);
+      const missing: string[] = [];
+      for (const tok of requestedTokens) {
+        if (!providedKeys.has(tok)) missing.push(tok);
+      }
+      if (missing.length > 0) {
+        throw new BindError(`missing named bind variables (${missing.join(', ')})`, sqlWithPlaceHolders);
       }
     }
 

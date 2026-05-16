@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
+import type { Attribute, Table } from '../../src';
 import Arel from '../../src';
-import type { Attribute, Table } from '../';
 
 const SelectStatement = Arel.Nodes.SelectStatement;
 const SelectCore = Arel.Nodes.SelectCore;
@@ -11,18 +11,16 @@ const Distinct = Arel.Nodes.Distinct;
 describe('Visitors.PostgreSQL', () => {
   let table: Table;
   let attr: Attribute;
+  let visitor: Arel.Visitors.PostgreSQL;
 
   beforeEach(() => {
-    // Note: PostgreSQL visitor implementation would be needed
-    // visitor = new Arel.Visitors.PostgreSQL();
+    visitor = new Arel.Visitors.PostgreSQL();
     table = new Arel.Table('users');
     attr = table.attribute('id');
   });
 
-  function compile(node: any): string {
-    // Note: This would need actual PostgreSQL visitor implementation
-    // return visitor.accept(node, new Arel.Collectors.SqlString()).value;
-    return node.toString(); // Placeholder
+  function compile(node: unknown): string {
+    return visitor.accept(node, new Arel.Collectors.SqlString()).value();
   }
 
   describe('locking', () => {
@@ -40,7 +38,7 @@ describe('Visitors.PostgreSQL', () => {
   it('should escape LIMIT', () => {
     const sc = new SelectStatement();
     sc.limit = new Limit(Arel.sql('omg'));
-    sc.cores[0].projections.push(Arel.sql('DISTINCT ON'));
+    sc.cores[0]?.projections.push(Arel.sql('DISTINCT ON'));
     sc.orders.push(Arel.sql('xyz'));
     const sql = compile(sc);
     expect(sql).toMatch(/LIMIT 'omg'/);
@@ -268,6 +266,46 @@ describe('Visitors.PostgreSQL', () => {
       const test = new Arel.Nodes.IsDistinctFrom(table.attribute('name'), null);
       const sql = compile(test);
       expect(sql).toContain('"users"."name" IS DISTINCT FROM NULL');
+    });
+  });
+
+  describe('RETURNING', () => {
+    it('insert statements render RETURNING', () => {
+      const manager = new Arel.InsertManager();
+      manager.into(table);
+      manager.insert([[table.attribute('name'), 'hello']]);
+      manager.returning(table.attribute('id'));
+      expect(compile(manager.ast)).toContain('INSERT INTO "users" ("name") VALUES (\'hello\') RETURNING "users"."id"');
+    });
+
+    it('delete statements render RETURNING', () => {
+      const manager = new Arel.DeleteManager();
+      manager.from(table);
+      manager.where(table.attribute('name').equal('hello'));
+      manager.returning(table.attribute('id'));
+      expect(compile(manager.ast)).toContain(
+        'DELETE FROM "users" WHERE "users"."name" = \'hello\' RETURNING "users"."id"',
+      );
+    });
+
+    it('update statements render RETURNING', () => {
+      const manager = new Arel.UpdateManager();
+      manager.table(table);
+      manager.set([[table.attribute('name'), 'hello']]);
+      manager.returning(table.attribute('id'));
+      expect(compile(manager.ast)).toContain('UPDATE "users" SET "name" = \'hello\' RETURNING "users"."id"');
+    });
+
+    it('update statements with joins render RETURNING', () => {
+      const posts = new Arel.Table('posts');
+      const joinSource = new Arel.Nodes.JoinSource(table, [table.createJoin(posts)]);
+      const manager = new Arel.UpdateManager();
+      manager.table(joinSource);
+      manager.set([[table.attribute('name'), 'hello']]);
+      manager.returning(table.attribute('id'));
+      expect(compile(manager.ast)).toContain(
+        'UPDATE "users" SET "name" = \'hello\' FROM CROSS JOIN "posts" RETURNING "users"."id"',
+      );
     });
   });
 

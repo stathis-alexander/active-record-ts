@@ -1,6 +1,14 @@
 import { NodeExpression } from '../NodeExpression';
 import { hash } from '../utilities/hash';
 
+/**
+ * Permissive type for what a `UnaryNode` may wrap. Most unary nodes hold a
+ * single Arel expression, but a few hold arrays (`OptimizerHintsNode`,
+ * `CubeNode`, `RollUpNode`, `GroupingSetNode`, `GroupingElementNode`,
+ * `ValuesListNode`). Kept loose to avoid a generic-class explosion across
+ * the dozens of subclasses.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: see jsdoc — variant payloads across subclasses
 export type ExpressionType = any;
 
 export class UnaryNode extends NodeExpression {
@@ -12,6 +20,10 @@ export class UnaryNode extends NodeExpression {
   }
 
   get value() {
+    return this.expression;
+  }
+
+  get expr() {
     return this.expression;
   }
 

@@ -1,32 +1,25 @@
+import type { Expression, RelationLike } from '../types';
 import { hash } from '../utilities/hash';
+import type { CommentNode } from './Comment';
 import { Node } from './Node';
-
-type RelationType = any;
-type WhereType = any[];
-type ValuesType = any[];
-type GroupType = any[];
-type HavingType = any[];
-type OrderType = any[];
-type LimitType = any | null;
-type OffsetType = any | null;
-type CommentType = any | null;
-type KeyType = any | null;
+import type { LimitNode, OffsetNode } from './Unary';
 
 export class UpdateStatementNode extends Node {
-  public relation: RelationType;
-  public wheres: WhereType;
-  public values: ValuesType;
-  public groups: GroupType;
-  public havings: HavingType;
-  public orders: OrderType;
-  public limit: LimitType;
-  public offset: OffsetType;
-  public comment: CommentType;
-  public key: KeyType;
+  public relation: RelationLike | null;
+  public wheres: Expression[];
+  public values: Expression[];
+  public groups: Expression[];
+  public havings: Expression[];
+  public orders: Expression[];
+  public limit: LimitNode | null;
+  public offset: OffsetNode | null;
+  public comment: CommentNode | null;
+  public key: Expression | null;
+  public returning: Expression[];
 
-  constructor(relation?: RelationType) {
+  constructor(relation?: RelationLike | null) {
     super();
-    this.relation = relation;
+    this.relation = relation ?? null;
     this.wheres = [];
     this.values = [];
     this.groups = [];
@@ -36,6 +29,7 @@ export class UpdateStatementNode extends Node {
     this.offset = null;
     this.comment = null;
     this.key = null;
+    this.returning = [];
   }
 
   override hash = () =>
@@ -50,5 +44,6 @@ export class UpdateStatementNode extends Node {
       this.offset,
       this.comment,
       this.key,
+      this.returning,
     ]);
 }

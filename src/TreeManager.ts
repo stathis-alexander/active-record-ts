@@ -1,63 +1,55 @@
 import { Collectors } from './Collectors';
 import { FactoryMethods } from './FactoryMethods';
 import { Nodes } from './Nodes';
+import type { LimitNode, OffsetNode } from './Nodes/Unary';
+import type { Expression } from './types';
 import { buildQuoted } from './utilities/nodes';
 import { Visitors } from './Visitors';
 
-type AstType = any | null;
-
 export class TreeManager extends FactoryMethods {
-  public ast: AstType;
+  /**
+   * The AST root. Concrete managers (`SelectManager`, `InsertManager`, etc.)
+   * `declare` this with a specific node type.
+   */
+  public ast: unknown = null;
 
-  // toDot = () => {
-  //   let collector = Collectors.PlainString();
-  //   collector = Visitors.Dot().compile(this.ast, collector);
-  //   return collector.value();
-  // };
-
-  toSql = () => {
-    // collector = Arel::Collectors::SQLString.new
-    // engine.with_connection do |connection|
-    //   connection.visitor.accept(@ast, collector).value
-    // end
+  toSql = (): string => {
     const collector = new Collectors.SqlString();
     return new Visitors.ToSql().accept(this.ast, collector).value();
   };
 }
 
-type LimitType = any;
-type OffsetType = any;
-type OrdersType = any[];
-type WhereType = any;
-type WheresType = WhereType[];
-
 export class TreeManagerWithStatementMethods extends TreeManager {
-  take = (limit: LimitType) => {
+  public declare ast: {
+    limit: LimitNode | null;
+    offset: OffsetNode | null;
+    orders: Expression[];
+    key: Expression | null;
+    wheres: Expression[];
+  };
+
+  take = (limit: Expression | null | undefined) => {
     if (limit != null) this.ast.limit = new Nodes.Limit(buildQuoted(limit));
     return this;
   };
-  offset = (offset: OffsetType) => {
+  offset = (offset: Expression | null | undefined) => {
     if (offset != null) this.ast.offset = new Nodes.Offset(buildQuoted(offset));
     return this;
   };
-  order = (...expressions: OrdersType) => {
+  order = (...expressions: Expression[]) => {
     this.ast.orders = expressions;
     return this;
   };
-  set key(key: string | string[]) {
-    if (Array.isArray(key)) {
-      this.ast.key = key.map((k) => buildQuoted(k));
-    } else {
-      this.ast.key = buildQuoted(key);
-    }
+  set key(key: Expression) {
+    this.ast.key = key;
   }
-  get key() {
+  get key(): Expression | null {
     return this.ast.key;
   }
-  wheres = (expressions: WheresType) => {
+  wheres = (expressions: Expression[]) => {
     this.ast.wheres = expressions;
   };
-  where = (expression: WhereType) => {
+  where = (expression: Expression) => {
     this.ast.wheres.push(expression);
     return this;
   };

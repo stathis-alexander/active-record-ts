@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { SqlLiteralNode } from '../../src';
 import Arel from '../../src';
 
 describe('As', () => {
@@ -6,7 +7,7 @@ describe('As', () => {
     const attr = new Arel.Table('users').attribute('id');
     const as = attr.as('foo');
     expect(as.left).toEqual(attr);
-    expect(as.right.isEqual('foo')).toBe(true);
+    expect((as.right as SqlLiteralNode).isEqual('foo')).toBe(true);
   });
 
   it('converts right to SqlLiteral if a string', () => {
@@ -37,7 +38,7 @@ describe('#to_cte', () => {
     const cteNode = asNode.toCte();
 
     expect(cteNode).toBeInstanceOf(Arel.Nodes.Cte);
-    expect(asNode.left.name).toEqual(cteNode.name);
+    expect((asNode.left as Arel.Table).name).toEqual(cteNode.name);
     expect(asNode.right).toEqual(cteNode.relation);
   });
 });

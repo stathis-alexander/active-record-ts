@@ -1,41 +1,77 @@
-import type { Collector } from '../Collectors';
-import type { Node } from '../Nodes/Node';
+import type { Collector } from '../Collectors/types';
 
-type NodeVisitor = <C extends Collector>(node: Node | Node[], collector?: C) => C;
+/**
+ * Anything a visitor's `accept`/`visit` may receive. The visitor is genuinely
+ * dynamic — it dispatches by class name to a `visit<TypeName>` method —
+ * so `unknown` is the correct upper bound here. Concrete `visit*` methods
+ * declare their precise expected node types.
+ */
+export type VisitTarget = unknown;
+
+type VisitMethod = (object: VisitTarget, collector: Collector | undefined) => Collector;
 
 export class Visitor {
-  accept = <C extends Collector>(object: Node | Node[], collector?: C): C => this.visit(object, collector);
+  accept = <C extends Collector>(object: VisitTarget, collector?: C): C => this.visit(object, collector);
 
-  protected visit = <C extends Collector>(object: Node | Node[], collector?: C): C => {
-    let visitFunc: NodeVisitor | null = this.visitFunction.bind(this)(object);
-
-    // If a visit function is not defined for a particular node, look up the inheritance chain to see if one is defined
-    // for the node's super class.
-    let obj: Object = object;
-    let depth = 0;
-    while (visitFunc == null && obj != null && depth < 5) {
-      obj = Object.getPrototypeOf(obj);
-      visitFunc = this.visitFunction(obj);
-      depth++;
+  protected visit = <C extends Collector>(object: VisitTarget, collector?: C): C => {
+    const visitFunc = this.resolveVisitor(object);
+    if (!visitFunc) {
+      const name = nodeType(object);
+      throw new Error(`Unsupported: No visit method for node of type: ${name}`);
     }
-    if (!visitFunc) throw new Error(`No visit method for node of type: ${nodeType(object)}`);
-
-    return visitFunc.bind(this)(object, collector);
+    return visitFunc.call(this, object, collector) as C;
   };
 
-  // @ts-expect-error: this is a little bit nasty, but it's relatively contained, so not too bad.
-  private visitFunction = (object: Object): NodeVisitor | null => this[functionName(nodeType(object))];
+  private resolveVisitor(object: VisitTarget): VisitMethod | null {
+    const direct = this.visitFunction(nodeType(object));
+    if (direct) return direct;
+
+    if (object != null && typeof object === 'object') {
+      let proto: object | null = Object.getPrototypeOf(object as object);
+      let depth = 0;
+      while (proto != null && depth < 10) {
+        const cleaned = constructorName(proto).replace('Node', '');
+        if (cleaned) {
+          const fn = this.visitFunction(cleaned);
+          if (fn) return fn;
+        }
+        proto = Object.getPrototypeOf(proto);
+        depth++;
+      }
+    }
+    return null;
+  }
+
+  private visitFunction(typeName: string): VisitMethod | null {
+    if (!typeName) return null;
+    const fn = (this as unknown as VisitorMethodMap)[`visit${typeName}`];
+    return typeof fn === 'function' ? fn : null;
+  }
 }
 
-const nodeType = (object: Object) => {
-  if (Array.isArray(object)) return 'Array';
-  if (!object) return typeof object;
+/**
+ * Indexed accessor for `visit*` methods on a visitor instance. Used by the
+ * dynamic-dispatch `visitFunction` helper which looks up handlers by name.
+ */
+type VisitorMethodMap = Record<string, VisitMethod | undefined>;
 
-  return object.constructor.name.replace('Node', '');
+/** Read `obj.constructor.name`, returning `''` when absent. */
+const constructorName = (obj: object): string => {
+  const ctor = (obj as { constructor?: { name?: string } }).constructor;
+  return ctor?.name || '';
 };
 
-const functionName = (nodeType: string) => {
-  if (!nodeType) return '';
-
-  return `visit${nodeType}`;
+export const nodeType = (object: VisitTarget): string => {
+  if (object === null || object === undefined) return 'NilClass';
+  if (Array.isArray(object)) return 'Array';
+  if (typeof object === 'string') return 'String';
+  if (typeof object === 'number') return 'Number';
+  if (typeof object === 'boolean') return object ? 'TrueClass' : 'FalseClass';
+  if (typeof object === 'bigint') return 'BigInt';
+  if (object instanceof Date) return 'Date';
+  if (object instanceof Set) return 'Set';
+  if (typeof object === 'object') {
+    return constructorName(object as object).replace('Node', '') || 'Object';
+  }
+  return typeof object;
 };

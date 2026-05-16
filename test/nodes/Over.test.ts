@@ -10,11 +10,36 @@ describe('Over', () => {
     });
   });
 
+  describe('with literal', () => {
+    it('should reference the window definition by name', () => {
+      const table = new Arel.Table('users');
+      const sql = table.attribute('id').count().over('foo').toSql();
+      expect(sql).toMatch(/COUNT\("users"\."id"\) OVER "foo"/i);
+    });
+  });
+
+  describe('with SQL literal', () => {
+    it('should reference the window definition by name', () => {
+      const table = new Arel.Table('users');
+      const sql = table.attribute('id').count().over(Arel.sql('foo')).toSql();
+      expect(sql).toMatch(/COUNT\("users"\."id"\) OVER foo/i);
+    });
+  });
+
   describe('with no expression', () => {
     it('should use empty definition', () => {
       const table = new Arel.Table('users');
       const sql = table.attribute('id').count().over().toSql();
       expect(sql).toMatch(/COUNT.*users.*id.*OVER.*\(\)/i);
+    });
+  });
+
+  describe('with expression', () => {
+    it('should use definition in sub-expression', () => {
+      const table = new Arel.Table('users');
+      const window = new Arel.Nodes.Window().order(table.attribute('foo'));
+      const sql = table.attribute('id').count().over(window).toSql();
+      expect(sql).toMatch(/COUNT\("users"\."id"\) OVER \(ORDER BY "users"\."foo"\)/i);
     });
   });
 

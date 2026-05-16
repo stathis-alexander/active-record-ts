@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
+import type { RowsNode } from '../../src';
 import Arel from '../../src';
+
+// `frame` accepts real Framing nodes; the hash-equality fixtures below stash a
+// numeric sentinel into `framing` instead. Mirror Ruby's freedom with a cast.
+type Sentinel = RowsNode;
 
 describe('Window', () => {
   describe('equality', () => {
@@ -7,12 +12,12 @@ describe('Window', () => {
       const window1 = new Arel.Nodes.Window();
       window1.orders = [1, 2];
       window1.partitions = [1];
-      window1.frame(3);
+      window1.frame(3 as unknown as Sentinel);
 
       const window2 = new Arel.Nodes.Window();
       window2.orders = [1, 2];
       window2.partitions = [1];
-      window2.frame(3);
+      window2.frame(3 as unknown as Sentinel);
 
       expect(window1.isEqual(window2)).toBe(true);
     });
@@ -21,12 +26,12 @@ describe('Window', () => {
       const window1 = new Arel.Nodes.Window();
       window1.orders = [1, 2];
       window1.partitions = [1];
-      window1.frame(3);
+      window1.frame(3 as unknown as Sentinel);
 
       const window2 = new Arel.Nodes.Window();
       window2.orders = [1, 2];
       window2.partitions = [1];
-      window2.frame(4);
+      window2.frame(4 as unknown as Sentinel);
 
       expect(window1.isEqual(window2)).toBe(false);
     });
@@ -39,12 +44,12 @@ describe('NamedWindow', () => {
       const window1 = new Arel.Nodes.NamedWindow('foo');
       window1.orders = [1, 2];
       window1.partitions = [1];
-      window1.frame(3);
+      window1.frame(3 as unknown as Sentinel);
 
       const window2 = new Arel.Nodes.NamedWindow('foo');
       window2.orders = [1, 2];
       window2.partitions = [1];
-      window2.frame(3);
+      window2.frame(3 as unknown as Sentinel);
 
       expect(window1.isEqual(window2)).toBe(true);
     });
@@ -53,12 +58,12 @@ describe('NamedWindow', () => {
       const window1 = new Arel.Nodes.NamedWindow('foo');
       window1.orders = [1, 2];
       window1.partitions = [1];
-      window1.frame(3);
+      window1.frame(3 as unknown as Sentinel);
 
       const window2 = new Arel.Nodes.NamedWindow('bar');
       window2.orders = [1, 2];
       window2.partitions = [1];
-      window2.frame(3);
+      window2.frame(3 as unknown as Sentinel);
 
       expect(window1.isEqual(window2)).toBe(false);
     });

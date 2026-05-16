@@ -11,10 +11,10 @@ function astWithBinds(bvs: string[]) {
   return manager.ast;
 }
 
-function compile(node: any) {
-  // Simulate visitor.accept(node, collector).value
-  // Assuming ToSql visitor is available as Arel.Visitors.ToSql
-  return new Arel.Collectors.Bind().value(node);
+function compile(node: unknown) {
+  const collector = new Arel.Collectors.Bind();
+  new Arel.Visitors.ToSql().accept(node, collector);
+  return collector.value();
 }
 
 describe('Collectors.Bind', () => {

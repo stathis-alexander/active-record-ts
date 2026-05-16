@@ -1,43 +1,62 @@
-import type { Attribute } from '../types';
+import { Attribute } from '../Attribute';
+import type { BindValue, Quotable } from '../types';
 import { hash } from '../utilities/hash';
-import { type FetchAttributeCallbackType, Node } from './Node';
+import { type FetchAttributeCallback, Node } from './Node';
 
-type AttributeType = any;
-type ValuesType = any[];
+/** Attribute-like values that HomogeneousIn can target. */
+type HomogeneousAttribute =
+  | Attribute
+  | {
+      typeCaster?: () => unknown;
+      relation?: { quotedArray?: (values: Quotable[]) => unknown[] };
+      quotedArray?: (values: Quotable[]) => unknown[];
+    };
 
 type HomogeneousInType = 'in' | 'notIn';
 
 export class HomogeneousInNode extends Node {
-  public readonly attribute: Attribute;
-  public readonly values: ValuesType;
+  public readonly attribute: HomogeneousAttribute;
+  public readonly values: Quotable[];
   public readonly type: HomogeneousInType;
 
-  constructor(values: ValuesType, attribute: AttributeType, type: HomogeneousInType) {
+  constructor(values: Quotable[], attribute: HomogeneousAttribute, type: HomogeneousInType) {
     super();
     this.attribute = attribute;
     this.values = values;
     this.type = type;
   }
   left = () => this.attribute;
-  right = () => this.attribute.quotedArray(this.values);
-
-  castedValues = () => {
-    const type = this.attribute.typeCaster();
-
-    const castedValues = this.values
-      .map((rawValue) => (type.serializeable ? type.serialize(rawValue) : undefined))
-      .filter(Boolean);
-
-    return castedValues;
+  right = () => {
+    const attr = this.attribute as {
+      quotedArray?: (values: Quotable[]) => unknown[];
+      relation?: { quotedArray?: (values: Quotable[]) => unknown[] };
+    };
+    if (typeof attr.quotedArray === 'function') {
+      return attr.quotedArray(this.values);
+    }
+    if (attr.relation && typeof attr.relation.quotedArray === 'function') {
+      return attr.relation.quotedArray(this.values);
+    }
+    return this.values;
   };
 
-  // should return ActiveModel::Attribute.with_cast_value(attribute.name, value, ActiveModel::Type.default_value)
-  procForBinds = () => (value: any) => undefined;
-  override fetchAttribute = (callback: FetchAttributeCallbackType) => {
-    if (this.attribute) return callback(this.attribute);
+  castedValues = (): BindValue[] => {
+    const attr = this.attribute as { typeCaster?: () => { serialize?: (v: Quotable) => Quotable } };
+    const type = typeof attr.typeCaster === 'function' ? attr.typeCaster() : null;
 
-    // this feels like a bug... but it's a bug in Arel proper as well.
-    return this.expression.fetchAttribute(callback);
+    if (type && typeof type.serialize === 'function') {
+      return this.values.map((rawValue) => type.serialize?.(rawValue));
+    }
+    return this.values;
+  };
+
+  procForBinds = (): ((value: unknown) => unknown) => (value) => value;
+
+  override fetchAttribute = (callback: FetchAttributeCallback) => {
+    // Only the `Attribute` variant of `HomogeneousAttribute` is a real Expression;
+    // a custom structural attribute (e.g. tests' `TypedNode`) has no fetchable Attribute.
+    if (this.attribute instanceof Attribute) return callback(this.attribute);
+    return undefined;
   };
 
   override equality = () => this.type === 'in';

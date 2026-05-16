@@ -1,31 +1,30 @@
 import { AliasPredications } from './AliasPredication';
-import { Attribute } from './Attribute';
+import { Attribute, type TypeCaster } from './Attribute';
 import { FactoryMethods } from './FactoryMethods';
 import { Nodes } from './Nodes';
+import type { SqlLiteralNode } from './Nodes/SqlLiteral';
 import type { JoinType, TableAliasNode } from './Nodes/types';
 import { SelectManager } from './SelectManager';
+import type { Expression, Quotable, RelationLike } from './types';
 import { hash } from './utilities/hash';
 
-type TableOptions = {
+export type TableOptions = {
   as?: string | null;
   klass?: string;
-  typeCaster?: unknown;
+  typeCaster?: TypeCaster;
 };
 
-type EngineType = any;
-type TypeCaster = any;
-
 export class Table extends AliasPredications(FactoryMethods) {
-  public name: string;
+  public name: string | SqlLiteralNode;
   public readonly tableAlias?: string;
 
-  // todo
   private readonly klass?: string;
-  private readonly typeCaster: TypeCaster;
+  private readonly typeCaster?: TypeCaster;
 
-  public static engine: EngineType | undefined;
+  /** Adapter-supplied engine (typically a connection or pool). Untyped — owned by the AR layer above. */
+  public static engine: unknown;
 
-  constructor(name: string, options?: TableOptions) {
+  constructor(name: string | SqlLiteralNode, options?: TableOptions) {
     super();
     this.name = name;
     this.klass = options?.klass;
@@ -37,23 +36,25 @@ export class Table extends AliasPredications(FactoryMethods) {
     this.tableAlias = as;
   }
 
-  alias = (name?: string) => new Nodes.TableAlias(this, name ?? `${this.name}_2`);
+  alias = (name?: string): TableAliasNode => new Nodes.TableAlias(this, name ?? `${this.name}_2`);
   from = () => new SelectManager(this);
-  join = (relation: any, joinType?: JoinType) => this.from().join(relation, joinType);
-  outerJoin = (relation: any) => this.join(relation, 'outer');
-  group = (...columns: string[]) => this.from().group(...columns);
-  order = (...columns: string[]) => this.from().order(...columns);
-  where = (condition: any) => this.from().where(condition);
-  project = (...things: any[]) => this.from().project(...things);
+  join = (relation: RelationLike | string | null, joinType?: JoinType) => this.from().join(relation, joinType);
+  outerJoin = (relation: RelationLike | string) => this.join(relation, 'outer');
+  group = (...columns: Array<Expression | string>) => this.from().group(...columns);
+  order = (...columns: Array<Expression | string>) => this.from().order(...columns);
+  where = (condition: Expression | string) => this.from().where(condition);
+  project = (...things: Array<Expression | string>) => this.from().project(...things);
   take = (limit: number) => this.from().take(limit);
   skip = (offset: number) => this.from().skip(offset);
-  having = (expression: any) => this.from().having(expression);
-  attribute = (name: string, table: Table | TableAliasNode = this) => new Attribute(table, name);
+  having = (expression: Expression) => this.from().having(expression);
+  attribute = (name: string | SqlLiteralNode, table: Table | TableAliasNode = this) => new Attribute(table, name);
 
-  typeCastForDatabase = (attributeName: string, value: unknown) =>
-    this.typeCaster?.typeCastForDatabase(attributeName, value);
-  typeForAttribute = (attributeName: string) => this.typeCaster?.typeForAttribute(attributeName) ?? {};
-  ableToTypeCast = () => this.typeCaster !== undefined;
+  quotedArray = (values: Quotable[]): Quotable[] => values;
 
-  hash = () => hash(this.name);
+  typeCastForDatabase = (attributeName: string, value: unknown): unknown =>
+    this.typeCaster?.typeCastForDatabase?.(attributeName, value);
+  typeForAttribute = (attributeName: string): unknown => this.typeCaster?.typeForAttribute?.(attributeName) ?? {};
+  ableToTypeCast = (): boolean => this.typeCaster !== undefined;
+
+  hash = () => hash(typeof this.name === 'string' ? this.name : this.name.toString());
 }

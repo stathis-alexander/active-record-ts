@@ -1,19 +1,34 @@
-import type { BindCallback, ProcForBinds } from './types';
+import type { BindCallback, Bind as BindInput, ProcForBinds } from './types';
 
+/**
+ * Collector that captures bind values only — used to extract the parameter
+ * array for a prepared statement, without producing any SQL text.
+ */
 export class Bind {
   public retryable?: boolean;
-  public binds: Bind[] = [];
+  public preparable?: boolean;
+  public binds: unknown[] = [];
 
   collect = (_string: string) => {
     return this;
   };
-  addBind = (bind: Bind, _callback: BindCallback) => {
-    this.binds.push(bind);
+  addBind = (bind: BindInput, _callback: BindCallback) => {
+    this.binds.push(this.extractValue(bind));
     return this;
   };
-  addBinds = (binds: Bind[], procForBinds: ProcForBinds, _callback: BindCallback) => {
-    this.binds = this.binds.concat(procForBinds ? binds.map(procForBinds) : binds);
+  addBinds = (binds: BindInput[], procForBinds: ProcForBinds | null | undefined, _callback: BindCallback) => {
+    const mapped = procForBinds ? binds.map(procForBinds) : binds;
+    this.binds = this.binds.concat(mapped.map((b) => this.extractValue(b)));
     return this;
   };
-  value = (): Bind[] => this.binds;
+  value = (): unknown[] => this.binds;
+
+  /** Unwrap `BindParamNode`-like wrappers, returning the primitive value. */
+  private extractValue(bind: BindInput): unknown {
+    if (bind == null) return bind;
+    if (typeof bind === 'object' && 'value' in (bind as object)) {
+      return (bind as { value: unknown }).value;
+    }
+    return bind;
+  }
 }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import Arel from '../src';
+import type { CastedNode, Node as NodeT } from '../src/types';
+import { expectInstance } from './_helpers';
 
 describe('attribute', () => {
   // expressions
@@ -162,6 +164,14 @@ describe('attribute', () => {
       mgr.where(relation.attribute('id').equalAny([1, 2]));
       expect(mgr.toSql()).toEqual('SELECT "users"."id" FROM "users" WHERE ("users"."id" = 1 OR "users"."id" = 2)');
     });
+
+    it('should not eat input', () => {
+      const relation = new Arel.Table('users');
+      const mgr = relation.project(relation.attribute('id'));
+      const values = [1, 2];
+      mgr.where(relation.attribute('id').equalAny(values));
+      expect(values).toEqual([1, 2]);
+    });
   });
 
   describe('equalAll', () => {
@@ -176,6 +186,14 @@ describe('attribute', () => {
       const mgr = relation.project(relation.attribute('id'));
       mgr.where(relation.attribute('id').equalAll([1, 2]));
       expect(mgr.toSql()).toEqual('SELECT "users"."id" FROM "users" WHERE ("users"."id" = 1 AND "users"."id" = 2)');
+    });
+
+    it('should not eat input', () => {
+      const relation = new Arel.Table('users');
+      const mgr = relation.project(relation.attribute('id'));
+      const values = [1, 2];
+      mgr.where(relation.attribute('id').equalAll(values));
+      expect(values).toEqual([1, 2]);
     });
   });
 
@@ -498,213 +516,292 @@ describe('attribute', () => {
   describe('between', () => {
     it('can be constructed with a standard range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(1, 3);
-      expect(node).toBeInstanceOf(Arel.Nodes.Between);
+      const node = expectInstance(attribute.between(1, 3), Arel.Nodes.Between);
+      const and = expectInstance(node.right, Arel.Nodes.And);
+      const c0 = expectInstance(and.children[0], Arel.Nodes.Casted);
+      const c1 = expectInstance(and.children[1], Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.And);
-      expect(node.right.children[0]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.children[1]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.children[0].value).toBe(1);
-      expect(node.right.children[1].value).toBe(3);
+      expect(c0.value).toBe(1);
+      expect(c1.value).toBe(3);
     });
 
     it('can be constructed with a range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(-Infinity, 3);
-      expect(node).toBeInstanceOf(Arel.Nodes.LessThanOrEqual);
+      const node = expectInstance(attribute.between(-Infinity, 3), Arel.Nodes.LessThanOrEqual);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with a quoted range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3));
-      expect(node).toBeInstanceOf(Arel.Nodes.LessThanOrEqual);
+      const node = expectInstance(
+        attribute.between(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3)),
+        Arel.Nodes.LessThanOrEqual,
+      );
+      const right = expectInstance(node.right, Arel.Nodes.Quoted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Quoted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with an exclusive range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(-Infinity, 3, { excludeEnd: true });
-      expect(node).toBeInstanceOf(Arel.Nodes.LessThan);
+      const node = expectInstance(attribute.between(-Infinity, 3, { excludeEnd: true }), Arel.Nodes.LessThan);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with a quoted exclusive range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3), { excludeEnd: true });
-      expect(node).toBeInstanceOf(Arel.Nodes.LessThan);
+      const node = expectInstance(
+        attribute.between(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3), { excludeEnd: true }),
+        Arel.Nodes.LessThan,
+      );
+      const right = expectInstance(node.right, Arel.Nodes.Quoted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Quoted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with an infinite range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(-Infinity, Infinity);
-      expect(node).toBeInstanceOf(Arel.Nodes.NotIn);
+      const node = expectInstance(attribute.between(-Infinity, Infinity), Arel.Nodes.NotIn);
       expect(node.left).toBe(attribute);
       expect(node.right).toEqual([]);
     });
 
     it('can be constructed with a quoted infinite range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(Infinity));
-      expect(node).toBeInstanceOf(Arel.Nodes.NotIn);
+      const node = expectInstance(
+        attribute.between(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(Infinity)),
+        Arel.Nodes.NotIn,
+      );
       expect(node.left).toBe(attribute);
       expect(node.right).toEqual([]);
     });
 
     it('can be constructed with a range ending at Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(0, Infinity);
-      expect(node).toBeInstanceOf(Arel.Nodes.GreaterThanOrEqual);
+      const node = expectInstance(attribute.between(0, Infinity), Arel.Nodes.GreaterThanOrEqual);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(0);
+      expect(right.value).toBe(0);
     });
 
     it('can be constructed with a quoted range ending at Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(new Arel.Nodes.Quoted(0), new Arel.Nodes.Quoted(Infinity));
-      expect(node).toBeInstanceOf(Arel.Nodes.GreaterThanOrEqual);
+      const node = expectInstance(
+        attribute.between(new Arel.Nodes.Quoted(0), new Arel.Nodes.Quoted(Infinity)),
+        Arel.Nodes.GreaterThanOrEqual,
+      );
+      const right = expectInstance(node.right, Arel.Nodes.Quoted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Quoted);
-      expect(node.right.value).toBe(0);
+      expect(right.value).toBe(0);
     });
 
     it('can be constructed with an exclusive range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(0, 3, { excludeEnd: true });
-      expect(node).toBeInstanceOf(Arel.Nodes.And);
-      expect(node.children[0]).toBeInstanceOf(Arel.Nodes.GreaterThanOrEqual);
-      expect(node.children[1]).toBeInstanceOf(Arel.Nodes.LessThan);
-      expect(node.children[0].left).toBe(attribute);
-      expect(node.children[0].right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.children[0].right.value).toBe(0);
-      expect(node.children[1].left).toBe(attribute);
-      expect(node.children[1].right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.children[1].right.value).toBe(3);
+      const node = expectInstance(attribute.between(0, 3, { excludeEnd: true }), Arel.Nodes.And);
+      const ge = expectInstance(node.children[0], Arel.Nodes.GreaterThanOrEqual);
+      const lt = expectInstance(node.children[1], Arel.Nodes.LessThan);
+      const geRight = expectInstance(ge.right, Arel.Nodes.Casted);
+      const ltRight = expectInstance(lt.right, Arel.Nodes.Casted);
+      expect(ge.left).toBe(attribute);
+      expect(geRight.value).toBe(0);
+      expect(lt.left).toBe(attribute);
+      expect(ltRight.value).toBe(3);
     });
 
     it('can be constructed with a range where the begin and end are equal', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.between(1, 1);
-      expect(node).toBeInstanceOf(Arel.Nodes.Equality);
+      const node = expectInstance(attribute.between(1, 1), Arel.Nodes.Equality);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(1);
+      expect(right.value).toBe(1);
+    });
+
+    it('can be constructed with a range implicitly starting at Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.between(..0) — beginless range with end=0
+      const node = expectInstance(attribute.between(null, 0), Arel.Nodes.LessThanOrEqual);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
+      expect(node.left).toBe(attribute);
+      expect(right.value).toBe(0);
+    });
+
+    it('can be constructed with a range implicitly ending at Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.between(0..) — endless range starting at 0
+      const node = expectInstance(attribute.between(0, null), Arel.Nodes.GreaterThanOrEqual);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
+      expect(node.left).toBe(attribute);
+      expect(right.value).toBe(0);
+    });
+
+    it('can be constructed with an exclusive range implicitly ending at Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.between(0...)
+      const node = expectInstance(attribute.between(0, null, { excludeEnd: true }), Arel.Nodes.GreaterThanOrEqual);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
+      expect(node.left).toBe(attribute);
+      expect(right.value).toBe(0);
+    });
+
+    it('can be constructed with an endless range starting from Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.between(Infinity..)
+      const node = expectInstance(attribute.between(Infinity, null), Arel.Nodes.In);
+      expect(node.left).toBe(attribute);
+      expect(node.right).toEqual([]);
+    });
+
+    it('can be constructed with a beginless range ending in -Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.between(..-Infinity)
+      const node = expectInstance(attribute.between(null, -Infinity), Arel.Nodes.In);
+      expect(node.left).toBe(attribute);
+      expect(node.right).toEqual([]);
     });
   });
 
   describe('notBetween', () => {
     it('can be constructed with a standard range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(1, 3);
-      expect(node).toBeInstanceOf(Arel.Nodes.Grouping);
-      const orNode = node.expression;
-      expect(orNode).toBeInstanceOf(Arel.Nodes.Or);
-      expect(orNode.children[0]).toBeInstanceOf(Arel.Nodes.LessThan);
-      expect(orNode.children[0].left).toBe(attribute);
-      expect(orNode.children[0].right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(orNode.children[0].right.value).toBe(1);
-      expect(orNode.children[1]).toBeInstanceOf(Arel.Nodes.GreaterThan);
-      expect(orNode.children[1].left).toBe(attribute);
-      expect(orNode.children[1].right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(orNode.children[1].right.value).toBe(3);
+      const node = expectInstance(attribute.notBetween(1, 3), Arel.Nodes.Grouping);
+      const orNode = expectInstance(node.expression, Arel.Nodes.Or);
+      const lt = expectInstance(orNode.children[0], Arel.Nodes.LessThan);
+      const gt = expectInstance(orNode.children[1], Arel.Nodes.GreaterThan);
+      const ltRight = expectInstance(lt.right, Arel.Nodes.Casted);
+      const gtRight = expectInstance(gt.right, Arel.Nodes.Casted);
+      expect(lt.left).toBe(attribute);
+      expect(ltRight.value).toBe(1);
+      expect(gt.left).toBe(attribute);
+      expect(gtRight.value).toBe(3);
     });
 
     it('can be constructed with a range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(-Infinity, 3);
-      expect(node).toBeInstanceOf(Arel.Nodes.GreaterThan);
+      const node = expectInstance(attribute.notBetween(-Infinity, 3), Arel.Nodes.GreaterThan);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with a quoted range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3));
-      expect(node).toBeInstanceOf(Arel.Nodes.GreaterThan);
+      const node = expectInstance(
+        attribute.notBetween(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3)),
+        Arel.Nodes.GreaterThan,
+      );
+      const right = expectInstance(node.right, Arel.Nodes.Quoted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Quoted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with an exclusive range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(-Infinity, 3, { excludeEnd: true });
-      expect(node).toBeInstanceOf(Arel.Nodes.GreaterThanOrEqual);
+      const node = expectInstance(
+        attribute.notBetween(-Infinity, 3, { excludeEnd: true }),
+        Arel.Nodes.GreaterThanOrEqual,
+      );
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with a quoted exclusive range starting from -Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3), {
-        excludeEnd: true,
-      });
-      expect(node).toBeInstanceOf(Arel.Nodes.GreaterThanOrEqual);
+      const node = expectInstance(
+        attribute.notBetween(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(3), { excludeEnd: true }),
+        Arel.Nodes.GreaterThanOrEqual,
+      );
+      const right = expectInstance(node.right, Arel.Nodes.Quoted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Quoted);
-      expect(node.right.value).toBe(3);
+      expect(right.value).toBe(3);
     });
 
     it('can be constructed with an infinite range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(-Infinity, Infinity);
-      expect(node).toBeInstanceOf(Arel.Nodes.In);
+      const node = expectInstance(attribute.notBetween(-Infinity, Infinity), Arel.Nodes.In);
       expect(node.left).toBe(attribute);
       expect(node.right).toEqual([]);
     });
 
     it('can be constructed with a quoted infinite range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(Infinity));
-      expect(node).toBeInstanceOf(Arel.Nodes.In);
+      const node = expectInstance(
+        attribute.notBetween(new Arel.Nodes.Quoted(-Infinity), new Arel.Nodes.Quoted(Infinity)),
+        Arel.Nodes.In,
+      );
       expect(node.left).toBe(attribute);
       expect(node.right).toEqual([]);
     });
 
     it('can be constructed with a range ending at Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(0, Infinity);
-      expect(node).toBeInstanceOf(Arel.Nodes.LessThan);
+      const node = expectInstance(attribute.notBetween(0, Infinity), Arel.Nodes.LessThan);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(0);
+      expect(right.value).toBe(0);
     });
 
     it('can be constructed with a quoted range ending at Infinity', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(new Arel.Nodes.Quoted(0), new Arel.Nodes.Quoted(Infinity));
-      expect(node).toBeInstanceOf(Arel.Nodes.LessThan);
+      const node = expectInstance(
+        attribute.notBetween(new Arel.Nodes.Quoted(0), new Arel.Nodes.Quoted(Infinity)),
+        Arel.Nodes.LessThan,
+      );
+      const right = expectInstance(node.right, Arel.Nodes.Quoted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Quoted);
-      expect(node.right.value).toBe(0);
+      expect(right.value).toBe(0);
     });
 
     it('can be constructed with an exclusive range', () => {
       const attribute = new Arel.Table('users').attribute('createdAt');
-      const node = attribute.notBetween(0, 3, { excludeEnd: true });
-      expect(node).toBeInstanceOf(Arel.Nodes.Grouping);
-      const orNode = node.expression;
-      expect(orNode).toBeInstanceOf(Arel.Nodes.Or);
-      expect(orNode.children[0]).toBeInstanceOf(Arel.Nodes.LessThan);
-      expect(orNode.children[0].left).toBe(attribute);
-      expect(orNode.children[0].right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(orNode.children[0].right.value).toBe(0);
-      expect(orNode.children[1]).toBeInstanceOf(Arel.Nodes.GreaterThanOrEqual);
-      expect(orNode.children[1].left).toBe(attribute);
-      expect(orNode.children[1].right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(orNode.children[1].right.value).toBe(3);
+      const node = expectInstance(attribute.notBetween(0, 3, { excludeEnd: true }), Arel.Nodes.Grouping);
+      const orNode = expectInstance(node.expression, Arel.Nodes.Or);
+      const lt = expectInstance(orNode.children[0], Arel.Nodes.LessThan);
+      const ge = expectInstance(orNode.children[1], Arel.Nodes.GreaterThanOrEqual);
+      const ltRight = expectInstance(lt.right, Arel.Nodes.Casted);
+      const geRight = expectInstance(ge.right, Arel.Nodes.Casted);
+      expect(lt.left).toBe(attribute);
+      expect(ltRight.value).toBe(0);
+      expect(ge.left).toBe(attribute);
+      expect(geRight.value).toBe(3);
+    });
+
+    it('can be constructed with a range implicitly starting at Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.not_between(..0)
+      const node = expectInstance(attribute.notBetween(null, 0), Arel.Nodes.GreaterThan);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
+      expect(node.left).toBe(attribute);
+      expect(right.value).toBe(0);
+    });
+
+    it('can be constructed with a range implicitly ending at Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.not_between(0..)
+      const node = expectInstance(attribute.notBetween(0, null), Arel.Nodes.LessThan);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
+      expect(node.left).toBe(attribute);
+      expect(right.value).toBe(0);
+    });
+
+    it('can be constructed with an endless range starting from Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.not_between(Infinity..)
+      const node = expectInstance(attribute.notBetween(Infinity, null), Arel.Nodes.NotIn);
+      expect(node.left).toBe(attribute);
+      expect(node.right).toEqual([]);
+    });
+
+    it('can be constructed with a beginless range ending in -Infinity', () => {
+      const attribute = new Arel.Table('users').attribute('createdAt');
+      // Ruby: attribute.not_between(..-Infinity)
+      const node = expectInstance(attribute.notBetween(null, -Infinity), Arel.Nodes.NotIn);
+      expect(node.left).toBe(attribute);
+      expect(node.right).toEqual([]);
     });
   });
 
@@ -716,8 +813,7 @@ describe('attribute', () => {
         .project(relation.attribute('id'))
         .where(relation.attribute('name').doesNotMatchAll(['%chunky%', '%bacon%']));
       const attribute = relation.attribute('name');
-      const node = attribute.in(mgr);
-      expect(node).toBeInstanceOf(Arel.Nodes.In);
+      const node = expectInstance(attribute.in(mgr), Arel.Nodes.In);
       expect(node.left).toBe(attribute);
       expect(node.right).toEqual(mgr.ast);
     });
@@ -729,32 +825,34 @@ describe('attribute', () => {
       const union = mgr1.union(mgr2);
       const mgr = relation.project(relation.attribute('id').in(union));
       expect(mgr.toSql()).toMatch(
-        '"users"."id" IN (( SELECT "users"."id" FROM "users" UNION SELECT "users"."id" FROM "users" ))',
+        '"users"."id" IN (( (SELECT "users"."id" FROM "users") UNION (SELECT "users"."id" FROM "users") ))',
       );
     });
 
     it('can be constructed with a list', () => {
       const attribute = new Arel.Table('users').attribute('id');
-      const node = attribute.in([1, 2, 3]);
-      expect(node).toBeInstanceOf(Arel.Nodes.In);
+      const node = expectInstance(attribute.in([1, 2, 3]), Arel.Nodes.In);
+      const right = node.right as CastedNode[];
       expect(node.left).toBe(attribute);
-      expect(node.right.length).toBe(3);
-      expect(node.right[0]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right[0].value).toBe(1);
-      expect(node.right[1]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right[1].value).toBe(2);
-      expect(node.right[2]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right[2].value).toBe(3);
+      expect(right.length).toBe(3);
+      const c0 = expectInstance(right[0], Arel.Nodes.Casted);
+      const c1 = expectInstance(right[1], Arel.Nodes.Casted);
+      const c2 = expectInstance(right[2], Arel.Nodes.Casted);
+      expect(c0.value).toBe(1);
+      expect(c1.value).toBe(2);
+      expect(c2.value).toBe(3);
     });
 
     it('can be constructed with a random object', () => {
       const attribute = new Arel.Table('users').attribute('id');
       const randomObject = {};
-      const node = attribute.in(randomObject);
-      expect(node).toBeInstanceOf(Arel.Nodes.In);
+      // `in` is typed to accept Expression / Expression[] / SubquerySource. A plain
+      // object isn't part of that union but Arel passes it through buildQuoted →
+      // Casted. Cast to unknown to satisfy the type-system here.
+      const node = expectInstance(attribute.in(randomObject as unknown as NodeT), Arel.Nodes.In);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(randomObject);
+      expect(right.value).toBe(randomObject);
     });
 
     it('should generate IN in sql', () => {
@@ -816,8 +914,7 @@ describe('attribute', () => {
       const mgr = relation.project(relation.attribute('id'));
       mgr.where(relation.attribute('name').doesNotMatchAll(['%chunky%', '%bacon%']));
       const attribute = relation.attribute('name');
-      const node = attribute.notIn(mgr);
-      expect(node).toBeInstanceOf(Arel.Nodes.NotIn);
+      const node = expectInstance(attribute.notIn(mgr), Arel.Nodes.NotIn);
       expect(node.left).toBe(attribute);
       expect(node.right).toEqual(mgr.ast);
     });
@@ -829,32 +926,31 @@ describe('attribute', () => {
       const union = mgr1.union(mgr2);
       const mgr = relation.project(relation.attribute('id').notIn(union));
       expect(mgr.toSql()).toMatch(
-        '"users"."id" NOT IN (( SELECT "users"."id" FROM "users" UNION SELECT "users"."id" FROM "users" ))',
+        '"users"."id" NOT IN (( (SELECT "users"."id" FROM "users") UNION (SELECT "users"."id" FROM "users") ))',
       );
     });
 
     it('can be constructed with a list', () => {
       const attribute = new Arel.Table('users').attribute('id');
-      const node = attribute.notIn([1, 2, 3]);
-      expect(node).toBeInstanceOf(Arel.Nodes.NotIn);
+      const node = expectInstance(attribute.notIn([1, 2, 3]), Arel.Nodes.NotIn);
+      const right = node.right as CastedNode[];
       expect(node.left).toBe(attribute);
-      expect(node.right.length).toBe(3);
-      expect(node.right[0]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right[0].value).toBe(1);
-      expect(node.right[1]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right[1].value).toBe(2);
-      expect(node.right[2]).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right[2].value).toBe(3);
+      expect(right.length).toBe(3);
+      const c0 = expectInstance(right[0], Arel.Nodes.Casted);
+      const c1 = expectInstance(right[1], Arel.Nodes.Casted);
+      const c2 = expectInstance(right[2], Arel.Nodes.Casted);
+      expect(c0.value).toBe(1);
+      expect(c1.value).toBe(2);
+      expect(c2.value).toBe(3);
     });
 
     it('can be constructed with a random object', () => {
       const attribute = new Arel.Table('users').attribute('id');
       const randomObject = {};
-      const node = attribute.notIn(randomObject);
-      expect(node).toBeInstanceOf(Arel.Nodes.NotIn);
+      const node = expectInstance(attribute.notIn(randomObject as unknown as NodeT), Arel.Nodes.NotIn);
+      const right = expectInstance(node.right, Arel.Nodes.Casted);
       expect(node.left).toBe(attribute);
-      expect(node.right).toBeInstanceOf(Arel.Nodes.Casted);
-      expect(node.right.value).toBe(randomObject);
+      expect(right.value).toBe(randomObject);
     });
 
     it('should generate NOT IN in sql', () => {
@@ -937,6 +1033,14 @@ describe('attribute', () => {
     });
   });
 
+  // # Mimic PG::TextDecoder::Array casting
+  const fakePgCaster = {
+    typeCastForDatabase(attrName: string, value: unknown) {
+      if (attrName === 'tags' && Array.isArray(value)) return `{${value.join(',')}}`;
+      return value;
+    },
+  };
+
   // containment
   describe('contains', () => {
     it('should create a Contains node', () => {
@@ -946,14 +1050,12 @@ describe('attribute', () => {
       expect(node.operator).toBe('@>');
     });
 
-    // it('should generate @> in sql', () => {
-    //   const relation = new Arel.Table('products', typeCaster: pgTextDecoderArrayCaster);
-    //   const mgr = relation.project(relation.attribute('id'));
-    //   mgr.where(relation.attribute('tags').contains(['foo', 'bar']));
-    //   expect(mgr.toSql()).toEqual(
-    //     'SELECT "products"."id" FROM "products" WHERE "products"."tags" @> \'{"foo","bar"}\'',
-    //   );
-    // });
+    it('should generate @> in sql', () => {
+      const relation = new Arel.Table('products', { typeCaster: fakePgCaster });
+      const mgr = relation.project(relation.attribute('id'));
+      mgr.where(relation.attribute('tags').contains(['foo', 'bar']));
+      expect(mgr.toSql()).toEqual('SELECT "products"."id" FROM "products" WHERE "products"."tags" @> \'{foo,bar}\'');
+    });
   });
 
   describe('overlaps', () => {
@@ -964,12 +1066,20 @@ describe('attribute', () => {
       expect(node.operator).toBe('&&');
     });
 
-    // it('should generate && in sql', () => {
-    //   const relation = new Arel.Table('products', typeCaster: pgTextDecoderArrayCaster);
-    //   const mgr = relation.project(relation.attribute('id'));
-    //   mgr.where(relation.attribute('tags').overlaps(['foo', 'bar']));
-    //   expect(mgr.toSql()).toEqual('SELECT "products"."id" FROM "products" WHERE "products"."tags" && \'{foo,bar}\'');
-    // });
+    it('should generate && in sql', () => {
+      const relation = new Arel.Table('products', { typeCaster: fakePgCaster });
+      const mgr = relation.project(relation.attribute('id'));
+      mgr.where(relation.attribute('tags').overlaps(['foo', 'bar']));
+      expect(mgr.toSql()).toEqual('SELECT "products"."id" FROM "products" WHERE "products"."tags" && \'{foo,bar}\'');
+    });
+  });
+
+  describe('equality', () => {
+    it('toSql should produce sql', () => {
+      const table = new Arel.Table('users');
+      const condition = table.attribute('id').equal(1);
+      expect(condition.toSql()).toEqual('"users"."id" = 1');
+    });
   });
 
   // # Mimic PG::TextDecoder::Array casting
@@ -992,20 +1102,32 @@ describe('attribute', () => {
       expect(condition.toSql()).toMatch('"foo"."id" = \'1\'');
     });
 
-    // it "type casts when given an explicit caster" do
-    //   fake_caster = Object.new
-    //   def fake_caster.type_cast_for_database(attr_name, value)
-    //     if attr_name == "id"
-    //       value.to_i
-    //     else
-    //       value
-    //     end
-    //   end
-    //   table = Table.new(:foo, type_caster: fake_caster)
-    //   condition = table["id"].eq("1").and(table["other_id"].eq("2"))
-    //   assert_predicate table, :able_to_type_cast?
-    //   _(condition.to_sql).must_equal %("foo"."id" = 1 AND "foo"."other_id" = '2')
-    // end
+    it('type casts when given an explicit caster', () => {
+      const fakeCaster = {
+        typeCastForDatabase(attrName: string, value: unknown) {
+          if (attrName === 'id') return Number.parseInt(value as string, 10);
+          return value;
+        },
+      };
+      const table = new Arel.Table('foo', { typeCaster: fakeCaster });
+      const condition = table.attribute('id').equal('1').and(table.attribute('other_id').equal('2'));
+      expect(table.ableToTypeCast()).toBe(true);
+      expect(condition.toSql()).toEqual('"foo"."id" = 1 AND "foo"."other_id" = \'2\'');
+    });
+
+    it('does not type cast SqlLiteral nodes', () => {
+      const fakeCaster = {
+        typeCastForDatabase(_attrName: string, value: unknown) {
+          return Number.parseInt(value as string, 10);
+        },
+      };
+      const table = new Arel.Table('foo', { typeCaster: fakeCaster });
+      const condition = table.attribute('id').equal(Arel.sql('(select 1)'));
+      expect(table.ableToTypeCast()).toBe(true);
+      expect(condition.toSql()).toEqual('"foo"."id" = (select 1)');
+    });
+
+    // commented Ruby-only block kept for reference (no-op):
     // it "does not type cast SqlLiteral Arel.Nodes" do
     //   fake_caster = Object.new
     //   def fake_caster.type_cast_for_database(attr_name, value)

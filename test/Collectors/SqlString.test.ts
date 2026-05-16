@@ -11,7 +11,7 @@ function astWithBinds() {
   return manager.ast;
 }
 
-function compile(node: any) {
+function compile(node: unknown) {
   const collector = new Arel.Collectors.SqlString();
   // Simulate visitor.accept(node, collector)
   // Assuming ToSql visitor is available as Arel.Visitors.ToSql

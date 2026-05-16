@@ -1,25 +1,26 @@
+import type { Expression, RelationLike } from '../types';
 import { hash } from '../utilities/hash';
 import { Node } from './Node';
-
-type RelationType = any;
-type ColumnsType = any[];
-type ValuesType = any | null;
-type SelectType = any | null;
+import type { SelectStatementNode } from './SelectStatement';
+import type { SqlLiteralNode } from './SqlLiteral';
+import type { ValuesListNode } from './ValuesList';
 
 export class InsertStatementNode extends Node {
-  public relation: RelationType;
-  public columns: ColumnsType;
-  public values: ValuesType;
-  public select: SelectType;
+  public relation: RelationLike | null;
+  public columns: Expression[];
+  public values: ValuesListNode | SqlLiteralNode | null;
+  public select: SelectStatementNode | unknown | null;
+  public returning: Expression[];
 
-  constructor(relation?: RelationType) {
+  constructor(relation?: RelationLike | null) {
     super();
 
-    this.relation = relation;
+    this.relation = relation ?? null;
     this.columns = [];
     this.values = null;
     this.select = null;
+    this.returning = [];
   }
 
-  override hash = () => hash([this.relation, this.columns, this.values, this.select]);
+  override hash = () => hash([this.relation, this.columns, this.values, this.select, this.returning]);
 }

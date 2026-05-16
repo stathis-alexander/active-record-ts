@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import Arel from '../src';
+import type { DistinctOnNode, Node } from '../src/types';
+import { expectInstance } from './_helpers';
+
+// Mirrors Rails' `assert_like` test helper, which collapses whitespace runs to a
+// single space before comparison. See activerecord/test/cases/arel/helper.rb.
+const normalizeLike = (s: string) => s.replace(/\s+/g, ' ').trim();
+const assertLike = (actual: string, expected: string) => expect(normalizeLike(actual)).toBe(normalizeLike(expected));
 
 describe('SelectManager', () => {
   it('should test join sources', () => {
@@ -44,9 +51,11 @@ describe('SelectManager', () => {
       it('makes an AS node by grouping the AST', () => {
         const manager = new Arel.SelectManager();
         const as = manager.as(Arel.sql('foo'));
-        expect(as.left).toBeInstanceOf(Arel.Nodes.Grouping);
-        expect(as.left.expr).toBe(manager.ast);
-        expect(as.right).toBe('foo');
+        const left = expectInstance(as.left, Arel.Nodes.Grouping);
+        expect(left.expr).toBe(manager.ast);
+        // Rails uses `assert_equal "foo", as.right` which succeeds because
+        // SqlLiteral < String; in JS we string-compare the wrapped value.
+        expect(String(as.right)).toBe('foo');
       });
 
       it('converts right to SqlLiteral if a string', () => {
@@ -158,9 +167,9 @@ describe('SelectManager', () => {
       // FIXME this probably shouldn't return a node
       const node = m1.intersect(m2);
 
-      // maybe FIXME: decide when wrapper parens are needed
-      expect(node.toSql()).toBe(
-        '( SELECT * FROM "users"  WHERE "users"."age" > 18 INTERSECT SELECT * FROM "users"  WHERE "users"."age" < 99 )',
+      assertLike(
+        node.toSql(),
+        '( (SELECT * FROM "users" WHERE "users"."age" > 18) INTERSECT (SELECT * FROM "users" WHERE "users"."age" < 99) )',
       );
     });
   });
@@ -378,18 +387,733 @@ describe('SelectManager', () => {
       // FIXME this probably shouldn't return a node
       const node = m1.union(m2);
 
-      // maybe FIXME: decide when wrapper parens are needed
-      expect(node.toSql()).toBe(
-        '( SELECT * FROM "users"  WHERE "users"."age" < 18 UNION SELECT * FROM "users"  WHERE "users"."age" > 99 )',
+      assertLike(
+        node.toSql(),
+        '( (SELECT * FROM "users" WHERE "users"."age" < 18) UNION (SELECT * FROM "users" WHERE "users"."age" > 99) )',
       );
     });
 
     it('should union all', () => {
       // Note: union all API may be different in TypeScript implementation
       const node = m1.unionAll(m2);
-      expect(node.toSql()).toBe(
-        '( SELECT * FROM "users"  WHERE "users"."age" < 18 UNION ALL SELECT * FROM "users"  WHERE "users"."age" > 99 )',
+      assertLike(
+        node.toSql(),
+        '( (SELECT * FROM "users" WHERE "users"."age" < 18) UNION ALL (SELECT * FROM "users" WHERE "users"."age" > 99) )',
       );
+    });
+  });
+
+  describe('except', () => {
+    it('should except two managers', () => {
+      const table = new Arel.Table('users');
+      const m1 = new Arel.SelectManager(table);
+      m1.project(Arel.star);
+      m1.where(table.attribute('age').between(18, 60));
+
+      const m2 = new Arel.SelectManager(table);
+      m2.project(Arel.star);
+      m2.where(table.attribute('age').between(40, 99));
+
+      const node = m1.except(m2);
+      assertLike(
+        node.toSql(),
+        '( (SELECT * FROM "users" WHERE "users"."age" BETWEEN 18 AND 60) EXCEPT (SELECT * FROM "users" WHERE "users"."age" BETWEEN 40 AND 99) )',
+      );
+    });
+  });
+
+  describe('with', () => {
+    it('should support basic WITH', () => {
+      const users = new Arel.Table('users');
+      const usersTop = new Arel.Table('users_top');
+      const comments = new Arel.Table('comments');
+
+      const top = users.project(users.attribute('id')).where(users.attribute('karma').greaterThan(100));
+      const usersAs = new Arel.Nodes.As(usersTop, top);
+      const selectManager = comments
+        .project(Arel.star)
+        .with(usersAs)
+        .where(comments.attribute('author_id').in(usersTop.project(usersTop.attribute('id'))));
+
+      assertLike(
+        selectManager.toSql(),
+        'WITH "users_top" AS (SELECT "users"."id" FROM "users" WHERE "users"."karma" > 100) SELECT * FROM "comments" WHERE "comments"."author_id" IN (SELECT "users_top"."id" FROM "users_top")',
+      );
+    });
+
+    it('should support WITH RECURSIVE', () => {
+      const comments = new Arel.Table('comments');
+      const commentsId = comments.attribute('id');
+      const commentsParentId = comments.attribute('parent_id');
+
+      const replies = new Arel.Table('replies');
+      const repliesId = replies.attribute('id');
+
+      const nonRecursiveTerm = new Arel.SelectManager();
+      nonRecursiveTerm.from(comments).project(commentsId, commentsParentId).where(commentsId.equal(42));
+
+      const recursiveTerm = new Arel.SelectManager();
+      recursiveTerm
+        .from(comments)
+        .project(commentsId, commentsParentId)
+        .join(replies)
+        .on(commentsParentId.equal(repliesId));
+
+      const union = nonRecursiveTerm.union(recursiveTerm);
+
+      const asStatement = new Arel.Nodes.As(replies, union);
+
+      const manager = new Arel.SelectManager();
+      manager.with('recursive', asStatement).from(replies).project(Arel.star);
+
+      assertLike(
+        manager.toSql(),
+        'WITH RECURSIVE "replies" AS ( (SELECT "comments"."id", "comments"."parent_id" FROM "comments" WHERE "comments"."id" = 42) UNION (SELECT "comments"."id", "comments"."parent_id" FROM "comments" INNER JOIN "replies" ON "comments"."parent_id" = "replies"."id") ) SELECT * FROM "replies"',
+      );
+    });
+  });
+
+  describe('lock', () => {
+    it('adds a lock node', () => {
+      const table = new Arel.Table('users');
+      const mgr = table.from();
+      assertLike(mgr.lock().toSql(), 'SELECT FROM "users" FOR UPDATE');
+    });
+  });
+
+  describe('orders', () => {
+    it('returns order clauses', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      const order = table.attribute('id');
+      manager.order(order);
+      expect(manager.orders()).toEqual([order]);
+    });
+  });
+
+  describe('order', () => {
+    it('generates order clauses', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.project(new Arel.Nodes.SqlLiteral('*'));
+      manager.from(table);
+      manager.order(table.attribute('id'));
+      assertLike(manager.toSql(), 'SELECT * FROM "users" ORDER BY "users"."id"');
+    });
+
+    it('takes *args', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.project(new Arel.Nodes.SqlLiteral('*'));
+      manager.from(table);
+      manager.order(table.attribute('id'), table.attribute('name'));
+      assertLike(manager.toSql(), 'SELECT * FROM "users" ORDER BY "users"."id", "users"."name"');
+    });
+
+    it('chains', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      expect(manager.order(table.attribute('id'))).toBe(manager);
+    });
+
+    it('has order attributes', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.project(new Arel.Nodes.SqlLiteral('*'));
+      manager.from(table);
+      manager.order(table.attribute('id').desc());
+      assertLike(manager.toSql(), 'SELECT * FROM "users" ORDER BY "users"."id" DESC');
+    });
+  });
+
+  describe('on', () => {
+    it('takes two params', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+      const manager = new Arel.SelectManager();
+
+      manager.from(left);
+      manager.join(right).on(predicate, predicate);
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" INNER JOIN "users" "users_2" ON "users"."id" = "users_2"."id" AND "users"."id" = "users_2"."id"',
+      );
+    });
+
+    it('takes three params', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+      const manager = new Arel.SelectManager();
+
+      manager.from(left);
+      manager.join(right).on(predicate, predicate, left.attribute('name').equal(right.attribute('name')));
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" INNER JOIN "users" "users_2" ON "users"."id" = "users_2"."id" AND "users"."id" = "users_2"."id" AND "users"."name" = "users_2"."name"',
+      );
+    });
+  });
+
+  describe('createInsert / createJoin', () => {
+    it('should create insert managers', () => {
+      const relation = new Arel.SelectManager();
+      const insert = relation.createInsert();
+      expect(insert).toBeInstanceOf(Arel.InsertManager);
+    });
+
+    it('should create join nodes', () => {
+      const relation = new Arel.SelectManager();
+      const join = relation.createJoin('foo' as unknown as Node, 'bar' as unknown as Node);
+      expect(join).toBeInstanceOf(Arel.Nodes.InnerJoin);
+      expect(join.left).toBe('foo' as unknown as Node);
+      expect(join.right).toBe('bar' as unknown as Node);
+    });
+
+    it('should create join nodes with a full outer join klass', () => {
+      const relation = new Arel.SelectManager();
+      const join = relation.createJoin('foo' as unknown as Node, 'bar' as unknown as Node, 'fullOuter');
+      expect(join).toBeInstanceOf(Arel.Nodes.FullOuterJoin);
+      expect(join.left).toBe('foo' as unknown as Node);
+      expect(join.right).toBe('bar' as unknown as Node);
+    });
+
+    it('should create join nodes with an outer join klass', () => {
+      const relation = new Arel.SelectManager();
+      const join = relation.createJoin('foo' as unknown as Node, 'bar' as unknown as Node, 'outer');
+      expect(join).toBeInstanceOf(Arel.Nodes.OuterJoin);
+      expect(join.left).toBe('foo' as unknown as Node);
+      expect(join.right).toBe('bar' as unknown as Node);
+    });
+
+    it('should create join nodes with a right outer join klass', () => {
+      const relation = new Arel.SelectManager();
+      const join = relation.createJoin('foo' as unknown as Node, 'bar' as unknown as Node, 'rightOuter');
+      expect(join).toBeInstanceOf(Arel.Nodes.RightOuterJoin);
+      expect(join.left).toBe('foo' as unknown as Node);
+      expect(join.right).toBe('bar' as unknown as Node);
+    });
+  });
+
+  describe('join', () => {
+    it('responds to join', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+      const manager = new Arel.SelectManager();
+
+      manager.from(left);
+      manager.join(right).on(predicate);
+      assertLike(manager.toSql(), 'SELECT FROM "users" INNER JOIN "users" "users_2" ON "users"."id" = "users_2"."id"');
+    });
+
+    it('takes a class', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+      const manager = new Arel.SelectManager();
+
+      manager.from(left);
+      manager.join(right, 'outer').on(predicate);
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" LEFT OUTER JOIN "users" "users_2" ON "users"."id" = "users_2"."id"',
+      );
+    });
+
+    it('takes the full outer join class', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+      const manager = new Arel.SelectManager();
+
+      manager.from(left);
+      manager.join(right, 'fullOuter').on(predicate);
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" FULL OUTER JOIN "users" "users_2" ON "users"."id" = "users_2"."id"',
+      );
+    });
+
+    it('takes the right outer join class', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+      const manager = new Arel.SelectManager();
+
+      manager.from(left);
+      manager.join(right, 'rightOuter').on(predicate);
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" RIGHT OUTER JOIN "users" "users_2" ON "users"."id" = "users_2"."id"',
+      );
+    });
+
+    it('noops on nil', () => {
+      const manager = new Arel.SelectManager();
+      expect(manager.join(null)).toBe(manager);
+    });
+
+    it('raises EmptyJoinError on empty', () => {
+      const left = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(left);
+      expect(() => manager.join('')).toThrow();
+    });
+  });
+
+  describe('outer join', () => {
+    it('responds to join', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+      const manager = new Arel.SelectManager();
+
+      manager.from(left);
+      manager.outerJoin(right).on(predicate);
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" LEFT OUTER JOIN "users" "users_2" ON "users"."id" = "users_2"."id"',
+      );
+    });
+
+    it('noops on nil', () => {
+      const manager = new Arel.SelectManager();
+      // outerJoin signature requires non-null; pass null via cast to mirror Ruby behavior.
+      expect(manager.outerJoin(null as unknown as Arel.Table)).toBe(manager);
+    });
+  });
+
+  describe('joins', () => {
+    it('returns inner join sql', () => {
+      const table = new Arel.Table('users');
+      const aliaz = table.alias();
+      const manager = new Arel.SelectManager();
+      manager.from(new Arel.Nodes.InnerJoin(aliaz, table.attribute('id').equal(aliaz.attribute('id'))));
+      expect(manager.toSql()).toContain('INNER JOIN "users" "users_2" "users"."id" = "users_2"."id"');
+    });
+
+    it('returns outer join sql', () => {
+      const table = new Arel.Table('users');
+      const aliaz = table.alias();
+      const manager = new Arel.SelectManager();
+      manager.from(new Arel.Nodes.OuterJoin(aliaz, table.attribute('id').equal(aliaz.attribute('id'))));
+      expect(manager.toSql()).toContain('LEFT OUTER JOIN "users" "users_2" "users"."id" = "users_2"."id"');
+    });
+
+    it('can have a non-table alias as relation name', () => {
+      const users = new Arel.Table('users');
+      const comments = new Arel.Table('comments');
+
+      const counts = comments
+        .from()
+        .group(comments.attribute('user_id'))
+        .project(comments.attribute('user_id').as('user_id'), comments.attribute('user_id').count().as('count'))
+        .as('counts');
+
+      const joins = users.join(counts).on(counts.attribute('user_id').equal(10));
+      assertLike(
+        joins.toSql(),
+        'SELECT FROM "users" INNER JOIN (SELECT "comments"."user_id" AS user_id, COUNT("comments"."user_id") AS count FROM "comments" GROUP BY "comments"."user_id") counts ON counts."user_id" = 10',
+      );
+    });
+
+    it('joins itself', () => {
+      const left = new Arel.Table('users');
+      const right = left.alias();
+      const predicate = left.attribute('id').equal(right.attribute('id'));
+
+      const mgr = left.join(right);
+      mgr.project(new Arel.Nodes.SqlLiteral('*'));
+      expect(mgr.on(predicate)).toBe(mgr);
+
+      assertLike(mgr.toSql(), 'SELECT * FROM "users" INNER JOIN "users" "users_2" ON "users"."id" = "users_2"."id"');
+    });
+
+    it('returns string join sql', () => {
+      const manager = new Arel.SelectManager();
+      manager.from(new Arel.Nodes.StringJoin(Arel.Nodes.buildQuoted('hello')));
+      expect(manager.toSql()).toContain("'hello'");
+    });
+  });
+
+  describe('group', () => {
+    it('takes an attribute', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.group(table.attribute('id'));
+      assertLike(manager.toSql(), 'SELECT FROM "users" GROUP BY "users"."id"');
+    });
+
+    it('chains', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      expect(manager.group(table.attribute('id'))).toBe(manager);
+    });
+
+    it('takes multiple args', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.group(table.attribute('id'), table.attribute('name'));
+      assertLike(manager.toSql(), 'SELECT FROM "users" GROUP BY "users"."id", "users"."name"');
+    });
+
+    it('makes strings literals', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.group('foo');
+      assertLike(manager.toSql(), 'SELECT FROM "users" GROUP BY foo');
+    });
+  });
+
+  describe('window definition', () => {
+    const setup = () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      return { table, manager };
+    };
+
+    it('can be empty', () => {
+      const { manager } = setup();
+      manager.window('a_window');
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS ()');
+    });
+
+    it('takes an order', () => {
+      const { table, manager } = setup();
+      manager.window('a_window').order(table.attribute('foo').asc());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ORDER BY "users"."foo" ASC)');
+    });
+
+    it('takes an order with multiple columns', () => {
+      const { table, manager } = setup();
+      manager.window('a_window').order(table.attribute('foo').asc(), table.attribute('bar').desc());
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" WINDOW "a_window" AS (ORDER BY "users"."foo" ASC, "users"."bar" DESC)',
+      );
+    });
+
+    it('takes a partition', () => {
+      const { table, manager } = setup();
+      manager.window('a_window').partition(table.attribute('bar'));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (PARTITION BY "users"."bar")');
+    });
+
+    it('takes a partition and an order', () => {
+      const { table, manager } = setup();
+      manager.window('a_window').partition(table.attribute('foo')).order(table.attribute('foo').asc());
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" WINDOW "a_window" AS (PARTITION BY "users"."foo" ORDER BY "users"."foo" ASC)',
+      );
+    });
+
+    it('takes a partition with multiple columns', () => {
+      const { table, manager } = setup();
+      manager.window('a_window').partition(table.attribute('bar'), table.attribute('baz'));
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" WINDOW "a_window" AS (PARTITION BY "users"."bar", "users"."baz")',
+      );
+    });
+
+    it('takes a rows frame, unbounded preceding', () => {
+      const { table, manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Preceding());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS UNBOUNDED PRECEDING)');
+      void table;
+    });
+    it('takes a rows frame, bounded preceding', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Preceding(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS 5 PRECEDING)');
+    });
+    it('takes a rows frame, unbounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Following());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS UNBOUNDED FOLLOWING)');
+    });
+    it('takes a rows frame, bounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.Following(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS 5 FOLLOWING)');
+    });
+    it('takes a rows frame, current row', () => {
+      const { manager } = setup();
+      manager.window('a_window').rows(new Arel.Nodes.CurrentRow());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (ROWS CURRENT ROW)');
+    });
+    it('takes a rows frame, between two delimiters', () => {
+      const { manager } = setup();
+      const window = manager.window('a_window');
+      window.frame(
+        new Arel.Nodes.Between(
+          window.rows(),
+          new Arel.Nodes.And([new Arel.Nodes.Preceding(), new Arel.Nodes.CurrentRow()]),
+        ),
+      );
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" WINDOW "a_window" AS (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)',
+      );
+    });
+    it('takes a range frame, unbounded preceding', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Preceding());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE UNBOUNDED PRECEDING)');
+    });
+    it('takes a range frame, bounded preceding', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Preceding(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE 5 PRECEDING)');
+    });
+    it('takes a range frame, unbounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Following());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE UNBOUNDED FOLLOWING)');
+    });
+    it('takes a range frame, bounded following', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.Following(5));
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE 5 FOLLOWING)');
+    });
+    it('takes a range frame, current row', () => {
+      const { manager } = setup();
+      manager.window('a_window').range(new Arel.Nodes.CurrentRow());
+      assertLike(manager.toSql(), 'SELECT FROM "users" WINDOW "a_window" AS (RANGE CURRENT ROW)');
+    });
+    it('takes a range frame, between two delimiters', () => {
+      const { manager } = setup();
+      const window = manager.window('a_window');
+      window.frame(
+        new Arel.Nodes.Between(
+          window.range(),
+          new Arel.Nodes.And([new Arel.Nodes.Preceding(), new Arel.Nodes.CurrentRow()]),
+        ),
+      );
+      assertLike(
+        manager.toSql(),
+        'SELECT FROM "users" WINDOW "a_window" AS (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)',
+      );
+    });
+  });
+
+  describe('delete', () => {
+    it('copies from', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      const stmt = manager.compileDelete();
+      assertLike(stmt.toSql(), 'DELETE FROM "users"');
+    });
+
+    it('copies where', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      const stmt = manager.compileDelete();
+      assertLike(stmt.toSql(), 'DELETE FROM "users" WHERE "users"."id" = 10');
+    });
+  });
+
+  describe('where_sql', () => {
+    it('gives me back the where sql', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      assertLike(String(manager.whereSql()), 'WHERE "users"."id" = 10');
+    });
+
+    it('joins wheres with AND', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      manager.where(table.attribute('id').equal(11));
+      assertLike(String(manager.whereSql()), 'WHERE "users"."id" = 10 AND "users"."id" = 11');
+    });
+
+    it('handles database-specific statements', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      manager.where(table.attribute('name').matches('foo%'));
+      assertLike(
+        String(manager.whereSql(new Arel.Visitors.PostgreSQL())),
+        `WHERE "users"."id" = 10 AND "users"."name" ILIKE 'foo%'`,
+      );
+    });
+
+    it('returns nil when there are no wheres', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      expect(manager.whereSql()).toBeNull();
+    });
+  });
+
+  describe('update', () => {
+    it('creates an update statement', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      const stmt = manager.compileUpdate([[table.attribute('id'), 1]], table.attribute('id'));
+      assertLike(stmt.toSql(), 'UPDATE "users" SET "id" = 1');
+    });
+
+    it('takes a string', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      const stmt = manager.compileUpdate(new Arel.Nodes.SqlLiteral('foo = bar'), table.attribute('id'));
+      assertLike(stmt.toSql(), 'UPDATE "users" SET foo = bar');
+    });
+
+    it('copies limits', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.take(1);
+      const stmt = manager.compileUpdate(new Arel.Nodes.SqlLiteral('foo = bar'), table.attribute('id'));
+      stmt.key = table.attribute('id');
+      assertLike(
+        stmt.toSql(),
+        'UPDATE "users" SET foo = bar WHERE ("users"."id") IN (SELECT "users"."id" FROM "users" LIMIT 1)',
+      );
+    });
+
+    it('copies order', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.order('foo');
+      const stmt = manager.compileUpdate(new Arel.Nodes.SqlLiteral('foo = bar'), table.attribute('id'));
+      stmt.key = table.attribute('id');
+      assertLike(
+        stmt.toSql(),
+        'UPDATE "users" SET foo = bar WHERE ("users"."id") IN (SELECT "users"."id" FROM "users" ORDER BY foo)',
+      );
+    });
+
+    it('copies where clauses', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.where(table.attribute('id').equal(10));
+      manager.from(table);
+      const stmt = manager.compileUpdate([[table.attribute('id'), 1]], table.attribute('id'));
+      assertLike(stmt.toSql(), 'UPDATE "users" SET "id" = 1 WHERE "users"."id" = 10');
+    });
+
+    it('copies where clauses when nesting is triggered', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.where(table.attribute('foo').equal(10));
+      manager.take(42);
+      manager.from(table);
+      const stmt = manager.compileUpdate([[table.attribute('id'), 1]], table.attribute('id'));
+      assertLike(
+        stmt.toSql(),
+        'UPDATE "users" SET "id" = 1 WHERE ("users"."id") IN (SELECT "users"."id" FROM "users" WHERE "users"."foo" = 10 LIMIT 42)',
+      );
+    });
+  });
+
+  describe('projections', () => {
+    it('reads projections', () => {
+      const manager = new Arel.SelectManager();
+      manager.project(Arel.sql('foo'), Arel.sql('bar'));
+      // Ruby compares Arel.sql values; SqlLiteral wraps a string. Compare via map(String).
+      expect(manager.projections().map((p) => String(p))).toEqual(['foo', 'bar']);
+    });
+
+    it('overwrites projections via setProjections', () => {
+      const manager = new Arel.SelectManager();
+      manager.project(Arel.sql('foo'));
+      manager.setProjections([Arel.sql('bar')]);
+      assertLike(manager.toSql(), 'SELECT bar');
+    });
+  });
+
+  describe('take (extra)', () => {
+    it('removes LIMIT when null is passed', () => {
+      const manager = new Arel.SelectManager();
+      manager.take(10);
+      expect(manager.toSql()).toMatch(/LIMIT/);
+
+      manager.take(null);
+      expect(manager.toSql()).not.toMatch(/LIMIT/);
+    });
+  });
+
+  describe('source', () => {
+    it('returns the join source of the select core', () => {
+      const manager = new Arel.SelectManager();
+      const cores = manager.ast.cores;
+      expect(cores[cores.length - 1]?.source).toBe(manager.ctx().source);
+    });
+  });
+
+  describe('distinct', () => {
+    it('sets the quantifier', () => {
+      const manager = new Arel.SelectManager();
+      manager.distinct();
+      expect(manager.ctx().setQuantifier).toBeInstanceOf(Arel.Nodes.Distinct);
+
+      manager.distinct(false);
+      expect(manager.ctx().setQuantifier).toBeNull();
+    });
+
+    it('chains', () => {
+      const manager = new Arel.SelectManager();
+      expect(manager.distinct()).toBe(manager);
+      expect(manager.distinct(false)).toBe(manager);
+    });
+  });
+
+  describe('distinctOn', () => {
+    it('sets the quantifier', () => {
+      const manager = new Arel.SelectManager();
+      const table = new Arel.Table('users');
+
+      const attr = table.attribute('id');
+      manager.distinctOn(attr);
+      const setQ = manager.ctx().setQuantifier;
+      expect(setQ).toBeInstanceOf(Arel.Nodes.DistinctOn);
+      expect((setQ as DistinctOnNode).expression).toBe(attr);
+
+      manager.distinctOn(null);
+      expect(manager.ctx().setQuantifier).toBeNull();
+    });
+
+    it('chains', () => {
+      const manager = new Arel.SelectManager();
+      const table = new Arel.Table('users');
+      expect(manager.distinctOn(table.attribute('id'))).toBe(manager);
+      expect(manager.distinctOn(null)).toBe(manager);
+    });
+  });
+
+  describe('comment', () => {
+    it('chains', () => {
+      const manager = new Arel.SelectManager();
+      expect(manager.comment('selecting')).toBe(manager);
+    });
+
+    it('appends a comment to the generated query', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table).project(table.attribute('id'));
+      manager.comment('selecting');
+      assertLike(manager.toSql(), 'SELECT "users"."id" FROM "users" /* selecting */');
     });
   });
 });

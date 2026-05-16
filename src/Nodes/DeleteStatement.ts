@@ -1,28 +1,22 @@
+import type { Expression, RelationLike } from '../types';
 import { hash } from '../utilities/hash';
+import type { CommentNode } from './Comment';
 import { Node } from './Node';
-
-type RelationType = any;
-type WheresType = any[];
-type GroupsType = any[];
-type HavingsType = any[];
-type OrdersType = any[];
-type LimitType = any | null;
-type OffsetType = any | null;
-type CommentType = any | null;
-type KeyType = any | null;
+import type { LimitNode, OffsetNode } from './Unary';
 
 export class DeleteStatementNode extends Node {
-  public relation: RelationType;
-  public wheres: WheresType;
-  public groups: GroupsType;
-  public havings: HavingsType;
-  public orders: OrdersType;
-  public limit: LimitType;
-  public offset: OffsetType;
-  public comment: CommentType;
-  public key: KeyType;
+  public relation: RelationLike | null;
+  public wheres: Expression[];
+  public groups: Expression[];
+  public havings: Expression[];
+  public orders: Expression[];
+  public limit: LimitNode | null;
+  public offset: OffsetNode | null;
+  public comment: CommentNode | null;
+  public key: Expression | null;
+  public returning: Expression[];
 
-  constructor(relation: RelationType = null, wheres: WheresType = []) {
+  constructor(relation: RelationLike | null = null, wheres: Expression[] = []) {
     super();
     this.relation = relation;
     this.wheres = wheres;
@@ -33,6 +27,7 @@ export class DeleteStatementNode extends Node {
     this.offset = null;
     this.comment = null;
     this.key = null;
+    this.returning = [];
   }
 
   override hash() {
@@ -46,6 +41,7 @@ export class DeleteStatementNode extends Node {
       this.offset,
       this.comment,
       this.key,
+      this.returning,
     ]);
   }
 }

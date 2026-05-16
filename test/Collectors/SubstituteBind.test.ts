@@ -11,7 +11,7 @@ function astWithBinds() {
   return manager.ast;
 }
 
-function compile(node: any, quoter: { quote: (val: any) => string }) {
+function compile(node: unknown, quoter: { quote: (val: unknown) => string }) {
   const collector = new Arel.Collectors.SubstituteBind(quoter, new Arel.Collectors.SqlString());
   // Simulate visitor.accept(node, collector).value
   // Assuming ToSql visitor is available as Arel.Visitors.ToSql
@@ -20,13 +20,13 @@ function compile(node: any, quoter: { quote: (val: any) => string }) {
 
 describe('Collectors.SubstituteBind', () => {
   it('compiles with default quoter', () => {
-    const quoter = { quote: (val: any) => val.toString() };
+    const quoter = { quote: (val: unknown) => String(val) };
     const sql = compile(astWithBinds(), quoter);
     expect(sql).toBe('SELECT FROM "users" WHERE "users"."age" = hello AND "users"."name" = world');
   });
 
   it('delegates quoting to quoter', () => {
-    const quoter = { quote: (val: any) => JSON.stringify(val) };
+    const quoter = { quote: (val: unknown) => JSON.stringify(val) };
     const sql = compile(astWithBinds(), quoter);
     expect(sql).toBe('SELECT FROM "users" WHERE "users"."age" = "hello" AND "users"."name" = "world"');
   });

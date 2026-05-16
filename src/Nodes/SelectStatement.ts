@@ -1,24 +1,20 @@
 import { NodeExpression } from '../NodeExpression';
+import type { Expression, RelationLike } from '../types';
 import { hash } from '../utilities/hash';
 import { Nodes } from '.';
-
-type RelationType = any;
-type CoreType = any[];
-type LimitType = any | null;
-type OrderType = any[];
-type LockType = any | null;
-type OffsetType = any | null;
-type WithType = any | null;
+import type { SelectCoreNode } from './SelectCore';
+import type { LimitNode, LockNode, OffsetNode } from './Unary';
+import type { WithNode, WithRecursiveNode } from './With';
 
 export class SelectStatementNode extends NodeExpression {
-  cores: CoreType;
-  limit: LimitType;
-  orders: OrderType;
-  lock: LockType;
-  offset: OffsetType;
-  with: WithType;
+  cores: SelectCoreNode[];
+  limit: LimitNode | null;
+  orders: Expression[];
+  lock: LockNode | null;
+  offset: OffsetNode | null;
+  with: WithNode | WithRecursiveNode | null;
 
-  constructor(relation?: RelationType) {
+  constructor(relation?: RelationLike) {
     super();
     this.cores = [new Nodes.SelectCore(relation)];
     this.limit = null;
@@ -26,6 +22,10 @@ export class SelectStatementNode extends NodeExpression {
     this.lock = null;
     this.offset = null;
     this.with = null;
+  }
+
+  get froms(): RelationLike[] {
+    return this.cores.map((c) => c.from).filter((f): f is RelationLike => Boolean(f));
   }
 
   override hash = () => hash([this.cores, this.limit, this.orders, this.lock, this.offset, this.with]);

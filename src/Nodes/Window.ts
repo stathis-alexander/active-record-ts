@@ -1,3 +1,4 @@
+import type { Expression } from '../types';
 import { hash } from '../utilities/hash';
 import { Node } from './Node';
 import { SqlLiteralNode } from './SqlLiteral';
@@ -7,19 +8,33 @@ export class CurrentRowNode extends Node {
   override hash = () => hash(CurrentRowNode.name);
 }
 
-export class RowsNode extends UnaryNode {}
-export class RangeNode extends UnaryNode {}
-export class PrecedingNode extends UnaryNode {}
-export class FollowingNode extends UnaryNode {}
+export class RowsNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
+export class RangeNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
+export class PrecedingNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
+export class FollowingNode extends UnaryNode {
+  constructor(expression: ExpressionType = null) {
+    super(expression);
+  }
+}
 
-type OrdersType = any[];
-type PartitionsType = any[];
-type FramingType = any | null;
+type Framing = Node | null;
 
 export class WindowNode extends Node {
-  public orders: OrdersType;
-  public partitions: PartitionsType;
-  public framing: FramingType;
+  public orders: Expression[];
+  public partitions: Expression[];
+  public framing: Framing;
 
   constructor() {
     super();
@@ -28,7 +43,7 @@ export class WindowNode extends Node {
     this.framing = null;
   }
 
-  order = (...orders: OrdersType) => {
+  order = (...orders: Expression[]) => {
     orders.forEach((order) => {
       if (typeof order === 'string') {
         this.orders.push(new SqlLiteralNode(order));
@@ -39,7 +54,7 @@ export class WindowNode extends Node {
     return this;
   };
 
-  partition = (...partitions: PartitionsType) => {
+  partition = (...partitions: Expression[]) => {
     partitions.forEach((partition) => {
       if (typeof partition === 'string') {
         this.partitions.push(new SqlLiteralNode(partition));
@@ -50,21 +65,21 @@ export class WindowNode extends Node {
     return this;
   };
 
-  frame = (expression: FramingType) => {
+  frame = <T extends Framing>(expression: T): T => {
     this.framing = expression;
     return expression;
   };
 
-  rows = (expression: ExpressionType) => {
-    if (this.framing) return new RowsNode(expression);
+  rows = (expression?: ExpressionType) => {
+    if (this.framing) return new RowsNode(expression ?? null);
 
-    return this.frame(new RowsNode(expression));
+    return this.frame(new RowsNode(expression ?? null));
   };
 
-  range = (expression: ExpressionType) => {
-    if (this.framing) return new RangeNode(expression);
+  range = (expression?: ExpressionType) => {
+    if (this.framing) return new RangeNode(expression ?? null);
 
-    return this.frame(new RangeNode(expression));
+    return this.frame(new RangeNode(expression ?? null));
   };
 
   override hash() {

@@ -1,15 +1,17 @@
-import type { Composite } from './Composite';
-import type { Bind, BindCallback, Collector, ProcForBinds, Quoter } from './types';
+import type { BindCallback, Bind as BindInput, Collector, ProcForBinds, Quoter } from './types';
 
-type NonSubstitueCollector = Exclude<Collector, SubstituteBind | Composite>;
-
+/**
+ * Substitution collector — instead of emitting placeholders, it quotes each
+ * bind value via the supplied `Quoter` and inlines the result into the SQL
+ * text. Used to produce a "fully resolved" SQL string (e.g. for logging).
+ */
 export class SubstituteBind {
   public quoter: Quoter;
-  public delegate: NonSubstitueCollector;
+  public delegate: Collector;
   public preparable?: boolean;
   public retryable?: boolean;
 
-  constructor(quoter: Quoter, delegateCollector: NonSubstitueCollector) {
+  constructor(quoter: Quoter, delegateCollector: Collector) {
     this.quoter = quoter;
     this.delegate = delegateCollector;
   }
@@ -19,17 +21,30 @@ export class SubstituteBind {
     return this;
   };
 
-  addBind = (bind: Bind, _callback: BindCallback) => {
-    let valueForDatabase = null;
-    if ('valueForDatabase' in bind) {
-      valueForDatabase = bind.valueForDatabase();
+  addBind = (bind: BindInput, _callback: BindCallback) => {
+    this.collect(this.quoter.quote(this.unwrap(bind)));
+    return this;
+  };
+
+  addBinds = (binds: BindInput[], _procForBinds: ProcForBinds | null | undefined, _callback: BindCallback) => {
+    this.collect(binds.map((bind) => this.quoter.quote(this.unwrap(bind))).join(', '));
+    return this;
+  };
+
+  /**
+   * Resolve a bind to the raw value the `Quoter` should stringify. Recognized
+   * shapes: nodes exposing `valueForDatabase()` (e.g. `CastedNode`), nodes
+   * exposing `.value` (e.g. `BindParamNode`), or any other bind passed
+   * through verbatim.
+   */
+  private unwrap(bind: BindInput): unknown {
+    if (bind != null && typeof bind === 'object') {
+      const obj = bind as { valueForDatabase?: () => unknown; value?: unknown };
+      if (typeof obj.valueForDatabase === 'function') return obj.valueForDatabase();
+      if ('value' in obj) return obj.value;
     }
-    this.collect(this.quoter.quote(valueForDatabase ?? bind));
-  };
+    return bind;
+  }
 
-  addBinds = (binds: Bind[], _procForBinds: ProcForBinds, _callback: BindCallback) => {
-    this.collect(binds.map((bind) => this.quoter.quote(bind)).join(', '));
-  };
-
-  value = () => this.delegate.value();
+  value = (): unknown => this.delegate.value();
 }

@@ -15,12 +15,12 @@ describe('Bin', () => {
     expect(result.value()).toBe('zomg');
   });
 
-  // it('should convert to MySQL SQL', () => {
-  //   const viz = new MySQLVisitor();
-  //   const node = new Arel.Nodes.Bin('zomg');
-  //   const result = viz.accept(node);
-  //   expect(result.value).toBe('CAST(zomg AS BINARY)');
-  // });
+  it('should convert to MySQL SQL', () => {
+    const viz = new Arel.Visitors.MySQL();
+    const node = new Arel.Nodes.Bin(Arel.sql('zomg'));
+    const result = viz.accept(node, new Arel.Collectors.SqlString());
+    expect(result.value()).toBe('CAST(zomg AS BINARY)');
+  });
 
   it('should consider bins with same value equal for uniqueness', () => {
     const x = new Arel.Nodes.Bin('zomg');

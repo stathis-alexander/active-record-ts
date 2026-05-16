@@ -1,15 +1,14 @@
 import { Table } from '../Table';
+import type { CteOptions, RelationLike } from '../types';
 import { hash } from '../utilities/hash';
-import { BinaryNode, type LeftType, type RightType } from './Binary';
-
-type CteNodeOptions = { materialized?: boolean };
+import { BinaryNode } from './Binary';
 
 export class CteNode extends BinaryNode {
-  public name: LeftType;
-  public relation: RightType;
+  public name: string;
+  public relation: RelationLike;
   public materialized?: boolean;
 
-  constructor(name: LeftType, relation: RightType, options?: CteNodeOptions) {
+  constructor(name: string, relation: RelationLike, options?: CteOptions) {
     super(name, relation);
     this.name = name;
     this.relation = relation;

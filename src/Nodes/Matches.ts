@@ -1,19 +1,21 @@
+import type { Expression } from '../types';
 import { buildQuoted } from '../utilities/nodes';
-import { BinaryNode, type LeftType, type RightType } from './Binary';
+import { BinaryNode } from './Binary';
 
 export type MatchesNodeOptions = {
-  escape?: string;
+  escape?: string | null;
   caseSensitive?: boolean;
 };
 
 export class MatchesNode extends BinaryNode {
-  public escape?: string;
+  /** Stored as the quoted form (`Quoted` node) so the visitor can emit it directly. */
+  public escape?: Expression;
   public caseSensitive: boolean;
 
-  constructor(left: LeftType, right: RightType, options: MatchesNodeOptions = {}) {
+  constructor(left: Expression, right: Expression, options: MatchesNodeOptions = {}) {
     super(left, right);
     this.escape = options?.escape ? buildQuoted(options.escape) : undefined;
-    this.caseSensitive = options.caseSensitive ?? true;
+    this.caseSensitive = options.caseSensitive ?? false;
   }
 }
 

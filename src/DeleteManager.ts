@@ -1,15 +1,18 @@
 import { Nodes } from './Nodes';
+import type { CommentNode } from './Nodes/Comment';
+import type { JoinSourceNode } from './Nodes/JoinSource';
 import { TreeManagerWithStatementMethods } from './TreeManager';
-
-type TableType = any;
+import type { DeleteStatementNode, Expression, RelationLike } from './types';
 
 export class DeleteManager extends TreeManagerWithStatementMethods {
-  constructor(table?: TableType) {
+  public declare ast: DeleteStatementNode;
+
+  constructor(table?: RelationLike | JoinSourceNode | null) {
     super();
-    this.ast = new Nodes.DeleteStatement(table);
+    this.ast = new Nodes.DeleteStatement((table as RelationLike) ?? null);
   }
 
-  from = (relation: TableType) => {
+  from = (relation: RelationLike) => {
     this.ast.relation = relation;
     return this;
   };
@@ -19,12 +22,20 @@ export class DeleteManager extends TreeManagerWithStatementMethods {
     });
     return this;
   };
-  having = (expression: any) => {
+  having = (expression: Expression) => {
     this.ast.havings.push(expression);
     return this;
   };
-  comment = (value: any) => {
+  comment = (value: CommentNode | null) => {
     this.ast.comment = value;
+    return this;
+  };
+  returning = (values: Expression | Expression[]) => {
+    if (Array.isArray(values)) {
+      this.ast.returning.push(...values);
+    } else {
+      this.ast.returning.push(values);
+    }
     return this;
   };
 }

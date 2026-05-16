@@ -11,7 +11,7 @@ function astWithBinds(bvs: string[]) {
   return manager.ast;
 }
 
-function compile(node: any) {
+function compile(node: unknown) {
   const sqlCollector = new Arel.Collectors.SqlString();
   const bindCollector = new Arel.Collectors.Bind();
   const collector = new Arel.Collectors.Composite(sqlCollector, bindCollector);
