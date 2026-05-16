@@ -1,7 +1,8 @@
-import { type ExpressionsType, FunctionNode } from './Function';
+import type { Expression } from '../types';
+import { FunctionNode } from './Function';
 
 export class CountNode extends FunctionNode {
-  constructor(expressions: ExpressionsType, distinct: boolean = false) {
+  constructor(expressions: Expression | Expression[], distinct: boolean = false) {
     super(expressions);
     this.distinct = distinct;
   }

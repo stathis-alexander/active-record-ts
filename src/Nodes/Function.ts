@@ -4,13 +4,11 @@ import type { Expression } from '../types';
 import { hash } from '../utilities/hash';
 import { WindowPredications } from '../WindowPredications';
 
-export type ExpressionsType = Expression | Expression[];
-
 export class FunctionNode extends WindowPredications(FilterPredications(NodeExpression)) {
-  public expressions: ExpressionsType;
+  public expressions: Expression | Expression[];
   public distinct: boolean = false;
 
-  constructor(expressions: ExpressionsType) {
+  constructor(expressions: Expression | Expression[]) {
     super();
     this.expressions = expressions;
   }
