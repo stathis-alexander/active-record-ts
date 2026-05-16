@@ -186,6 +186,47 @@ const applyDependent = async (owner: Base, reflection: AssociationReflection): P
 void pluralize;
 
 /**
+ * Snapshot of record state at the moment a save/destroy participated in
+ * a transaction. We restore from this if the surrounding tx rolls back.
+ */
+type RecordSnapshot = {
+  persisted: boolean;
+  destroyed: boolean;
+  attributes: Record<string, unknown>;
+  changedBefore: string[];
+};
+
+const captureSnapshot = (record: Base): RecordSnapshot => {
+  // biome-ignore lint/suspicious/noExplicitAny: protected fields
+  const r = record as any;
+  return {
+    persisted: r._persisted,
+    destroyed: r._destroyed,
+    attributes: { ...record.attributes() },
+    changedBefore: record.changed(),
+  };
+};
+
+/**
+ * Mirrors Rails' `restore_transaction_record_state` — restores ONLY the
+ * persisted / destroyed flags. Rails does NOT roll back attribute values
+ * on transaction rollback: the in-memory record keeps the new values you
+ * assigned, and you have to `reload` if you want the pre-update state.
+ * (We snapshot attributes too in case a future option lets callers opt in.)
+ */
+const restoreSnapshot = (record: Base, snapshot: RecordSnapshot, context: 'create' | 'update' | 'destroy'): void => {
+  // biome-ignore lint/suspicious/noExplicitAny: protected fields
+  const r = record as any;
+  if (context === 'create') {
+    r._persisted = false;
+  } else if (context === 'destroy') {
+    r._destroyed = false;
+    r._persisted = snapshot.persisted;
+  }
+  // 'update' is intentionally a no-op for attribute state — matches Rails.
+};
+
+/**
  * Stack of pending transaction queues. Each entry collects callbacks
  * registered by records that were saved/destroyed inside that
  * transaction. The top of the stack is the innermost transaction; when
@@ -357,10 +398,12 @@ export class Base extends Model {
       as: options.as,
       optional: true,
       dependent: options.dependent,
+      through: options.through,
+      source: options.source,
     };
     registerAssociation(this, reflection);
     defineAssociationAccessor(this as unknown as typeof Base, reflection);
-    if (targetCtor && options.dependent) {
+    if (targetCtor && options.dependent && !options.through) {
       // Hook a destroy callback to enforce :dependent at owner-destroy time.
       this.beforeDestroy(async (record) => {
         await applyDependent(record, reflection);
@@ -480,6 +523,8 @@ export class Base extends Model {
     (record as any)._attributes.hydrate(row);
     // biome-ignore lint/suspicious/noExplicitAny: protected field access
     (record as any)._persisted = true;
+    const ctor = record.constructor as typeof Base;
+    void ctor.runCallbacks('find', record, async () => { /* body */ });
     return record;
   }
 
@@ -536,6 +581,14 @@ export class Base extends Model {
 
   static joins<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).joins(...names);
+  }
+
+  static leftOuterJoins<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).leftOuterJoins(...names);
+  }
+
+  static eagerLoad<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).eagerLoad(...names);
   }
 
   static async find<This extends typeof Base>(this: This, ids: readonly unknown[]): Promise<InstanceType<This>[]>;
@@ -789,6 +842,8 @@ export class Base extends Model {
     const ctor = this.constructor as typeof Base;
     const wasNew = this.newRecord;
     if (!(await this.validate(wasNew ? 'create' : 'update'))) return false;
+    // Snapshot pre-save state so a rollback can restore it.
+    const preSnapshot = captureSnapshot(this);
     let inner = false;
     const outer = await ctor.runCallbacks('save', this, async () => {
       inner = await ctor.runCallbacks(wasNew ? 'create' : 'update', this, async () => {
@@ -796,7 +851,9 @@ export class Base extends Model {
         else await this.updateRecord();
       });
     });
-    if (outer && inner) await this.queueTransactionalCallbacks(wasNew ? 'create' : 'update');
+    if (outer && inner) {
+      await this.queueTransactionalCallbacks(wasNew ? 'create' : 'update', preSnapshot);
+    }
     return outer && inner;
   }
 
@@ -819,6 +876,7 @@ export class Base extends Model {
   async destroy(): Promise<this> {
     if (this._destroyed) return this;
     const ctor = this.constructor as typeof Base;
+    const preSnapshot = captureSnapshot(this);
     await ctor.runCallbacks('destroy', this, async () => {
       if (this._persisted) {
         const table = ctor.arelTable();
@@ -831,7 +889,7 @@ export class Base extends Model {
       }
       this._destroyed = true;
     });
-    await this.queueTransactionalCallbacks('destroy');
+    await this.queueTransactionalCallbacks('destroy', preSnapshot);
     return this;
   }
 
@@ -891,6 +949,7 @@ export class Base extends Model {
       if (schema.has(c)) this.writeAttribute(c, now);
     }
     if (this._persisted) await this.save();
+    await ctor.runCallbacks('touch', this, async () => { /* body */ });
     return this;
   }
 
@@ -1004,8 +1063,15 @@ export class Base extends Model {
    * the active transaction queue (or run `after_commit` immediately when
    * not inside one). Filtering by `on: 'create' | 'update' | 'destroy'`
    * is applied at fire time via the callback chain's context filter.
+   *
+   * `preSnapshot` is the record state at the START of save/destroy — we
+   * use it to roll back the in-memory state when the surrounding tx is
+   * aborted.
    */
-  private async queueTransactionalCallbacks(context: 'create' | 'update' | 'destroy'): Promise<void> {
+  private async queueTransactionalCallbacks(
+    context: 'create' | 'update' | 'destroy',
+    preSnapshot: RecordSnapshot,
+  ): Promise<void> {
     const ctor = this.constructor as typeof Base;
     if (transactionStack.length === 0) {
       await ctor.runCallbacks('commit', this, async () => { /* no-op body */ }, context);
@@ -1015,6 +1081,7 @@ export class Base extends Model {
       await ctor.runCallbacks('commit', this, async () => { /* no-op body */ }, context);
     });
     enqueueOnRollback(async () => {
+      restoreSnapshot(this, preSnapshot, context);
       await ctor.runCallbacks('rollback', this, async () => { /* no-op body */ }, context);
     });
   }

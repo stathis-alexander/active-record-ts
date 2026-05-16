@@ -27,7 +27,7 @@ export type BelongsToOptions = {
 };
 
 export type HasManyOptions = {
-  /** Lazy reference to the target class. Required unless `as:` polymorphic. */
+  /** Lazy reference to the target class. Required unless `as:` polymorphic or `through:`. */
   class?: ClassRef;
   /** Foreign key on the OWNED side (target). Default inferred from declaring class. */
   foreignKey?: string;
@@ -37,6 +37,13 @@ export type HasManyOptions = {
   as?: string;
   /** Action when the owner is destroyed. */
   dependent?: 'destroy' | 'delete_all' | 'nullify';
+  /**
+   * Name of an intermediate association already declared on this class.
+   * `User.hasMany('memberships'); User.hasMany('teams', { through: 'memberships' })`.
+   */
+  through?: string;
+  /** Name of the association on the through-model that points at the final target. */
+  source?: string;
 };
 
 export type HasOneOptions = HasManyOptions;
@@ -46,7 +53,7 @@ export type AssociationReflection = {
   kind: AssociationKind;
   /** The accessor / declaration name (e.g. `'user'`, `'posts'`). */
   name: string;
-  /** Lazy class lookup. `null` for polymorphic belongs_to. */
+  /** Lazy class lookup. `null` for polymorphic belongs_to or unresolved `through`. */
   classRef: ClassRef | null;
   /** Foreign key on whichever side holds it. */
   foreignKey: string;
@@ -59,4 +66,8 @@ export type AssociationReflection = {
   as?: string;
   optional: boolean;
   dependent?: 'destroy' | 'delete_all' | 'nullify';
+  /** Intermediate association name for has_many :through. */
+  through?: string;
+  /** Source association name on the through-model. Defaults to `name` singularized. */
+  source?: string;
 };

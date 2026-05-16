@@ -190,7 +190,50 @@ describe('Transactions — record state', () => {
     expect(await Topic.exists({ title: 'keep me' })).toBe(true);
   });
 
-  test.skip('record destroyed-state is restored in-memory after rollback (TODO: restore destroyed flag)', () => {});
-  test.skip('save state restored after rollback (TODO: restore persisted flag)', () => {});
-  test.skip('dirty state restored after rollback (TODO)', () => {});
+  test('record destroyed-state is restored in-memory after rollback', async () => {
+    const t = await Topic.create({ title: 'live' });
+    try {
+      await Topic.transaction(async () => {
+        await t.destroy();
+        throw new Error('roll back');
+      });
+    } catch {
+      /* expected */
+    }
+    expect(t.destroyed).toBe(false);
+    expect(t.persisted).toBe(true);
+  });
+
+  test('save state restored after rollback (create case)', async () => {
+    let created: Topic | null = null;
+    try {
+      await Topic.transaction(async () => {
+        created = await Topic.create({ title: 'tx-only' });
+        expect(created.persisted).toBe(true);
+        throw new Error('rollback');
+      });
+    } catch {
+      /* expected */
+    }
+    // The in-memory record reverts to newRecord, since the INSERT was rolled back.
+    expect(created!.persisted).toBe(false);
+  });
+
+  test('attribute state is NOT restored after rollback (matches Rails — call reload to refetch)', async () => {
+    const t = await Topic.create({ title: 'original' });
+    try {
+      await Topic.transaction(async () => {
+        t.writeAttribute('title', 'pending');
+        await t.save();
+        throw new Error('rollback');
+      });
+    } catch {
+      /* expected */
+    }
+    // In-memory keeps the value we assigned — same as Rails.
+    expect(t.readAttribute('title')).toBe('pending');
+    // The DB row was rolled back though.
+    await t.reload();
+    expect(t.readAttribute('title')).toBe('original');
+  });
 });

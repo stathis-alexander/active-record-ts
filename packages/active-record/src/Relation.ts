@@ -50,8 +50,12 @@ type RelationState = {
   joinValues: Expression[];
   /** Association names registered via `includes()` / `preload()`. */
   preloadValues: string[];
-  /** Association names registered via `joins()`. */
+  /** Association names registered via `joins()`. INNER JOIN. */
   joinAssociations: string[];
+  /** Association names registered via `leftOuterJoins()`. LEFT OUTER JOIN. */
+  leftJoinAssociations: string[];
+  /** Association names registered via `eagerLoad()`. LEFT OUTER JOIN + result hydration via preload. */
+  eagerLoadValues: string[];
   limitValue: number | null;
   offsetValue: number | null;
   distinctValue: boolean;
@@ -68,6 +72,8 @@ const emptyState = (): RelationState => ({
   joinValues: [],
   preloadValues: [],
   joinAssociations: [],
+  leftJoinAssociations: [],
+  eagerLoadValues: [],
   limitValue: null,
   offsetValue: null,
   distinctValue: false,
@@ -84,6 +90,8 @@ const cloneState = (state: RelationState): RelationState => ({
   joinValues: [...state.joinValues],
   preloadValues: [...state.preloadValues],
   joinAssociations: [...state.joinAssociations],
+  leftJoinAssociations: [...state.leftJoinAssociations],
+  eagerLoadValues: [...state.eagerLoadValues],
   limitValue: state.limitValue,
   offsetValue: state.offsetValue,
   distinctValue: state.distinctValue,
@@ -208,6 +216,28 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   }
 
   /**
+   * LEFT OUTER JOIN one or more associations. Like `joins`, but rows
+   * without a matching join are kept.
+   */
+  leftOuterJoins(...names: string[]): Relation<T> {
+    return this.chain((s) => s.leftJoinAssociations.push(...names));
+  }
+
+  /**
+   * Eager-load via LEFT OUTER JOIN + post-load preload. Mirrors Rails'
+   * `eager_load` — useful when you need to `where` on the joined table
+   * but still want the associations cached on each parent. We currently
+   * implement this as a `leftOuterJoins(...) + preload(...)` shortcut.
+   */
+  eagerLoad(...names: string[]): Relation<T> {
+    return this.chain((s) => {
+      s.leftJoinAssociations.push(...names);
+      s.eagerLoadValues.push(...names);
+      s.preloadValues.push(...names);
+    });
+  }
+
+  /**
    * Combine this relation with another via OR. Both must target the same
    * model class and must not contain incompatible clauses (groups / orders).
    * The resulting WHERE clause is `(this.wheres) OR (other.wheres)`.
@@ -304,11 +334,16 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     } else {
       manager.project(this.table.attribute(Arel.star));
     }
-    // INNER JOINs from `joins('user', 'comments')` etc. — render as raw
-    // SQL fragments. Each association name resolves through the registry
-    // to a reflection that knows the FK/PK columns to bind.
+    // INNER / LEFT OUTER JOINs from `joins('user', 'comments')` /
+    // `leftOuterJoins('user')` / `eagerLoad('user')`. Each association
+    // name resolves through the registry to a reflection that knows the
+    // FK/PK columns to bind.
     for (const assocName of this.state.joinAssociations) {
-      const fragment = this.joinFragmentFor(assocName);
+      const fragment = this.joinFragmentFor(assocName, 'inner');
+      if (fragment) manager.join(Arel.sql(fragment));
+    }
+    for (const assocName of this.state.leftJoinAssociations) {
+      const fragment = this.joinFragmentFor(assocName, 'left');
       if (fragment) manager.join(Arel.sql(fragment));
     }
     for (const clause of this.state.whereClauses) manager.where(clause);
@@ -322,21 +357,22 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return manager;
   }
 
-  /** Resolve an association name into an `INNER JOIN ... ON ...` SQL fragment. */
-  private joinFragmentFor(name: string): string | null {
+  /** Resolve an association name into a `[INNER|LEFT OUTER] JOIN ... ON ...` fragment. */
+  private joinFragmentFor(name: string, kind: 'inner' | 'left'): string | null {
     const reflection = lookupAssociation(this.klass, name);
     if (!reflection) throw new Error(`Unknown association "${name}" on ${this.klass.name}`);
+    const op = kind === 'left' ? 'LEFT OUTER JOIN' : 'INNER JOIN';
     if (reflection.kind === 'belongs_to') {
       const target = (reflection.classRef!() as unknown) as { effectiveTableName(): string };
       const targetTable = target.effectiveTableName();
       const own = ((this.klass as unknown) as { effectiveTableName(): string }).effectiveTableName();
-      return `INNER JOIN "${targetTable}" ON "${targetTable}"."${reflection.primaryKey}" = "${own}"."${reflection.foreignKey}"`;
+      return `${op} "${targetTable}" ON "${targetTable}"."${reflection.primaryKey}" = "${own}"."${reflection.foreignKey}"`;
     }
     // has_many / has_one — FK on the owned side
     const target = (reflection.classRef!() as unknown) as { effectiveTableName(): string };
     const targetTable = target.effectiveTableName();
     const own = ((this.klass as unknown) as { effectiveTableName(): string }).effectiveTableName();
-    return `INNER JOIN "${targetTable}" ON "${targetTable}"."${reflection.foreignKey}" = "${own}"."${reflection.primaryKey}"`;
+    return `${op} "${targetTable}" ON "${targetTable}"."${reflection.foreignKey}" = "${own}"."${reflection.primaryKey}"`;
   }
 
   /** Render to `[sql, binds]` against the model's adapter. */
