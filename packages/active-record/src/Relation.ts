@@ -56,6 +56,12 @@ type RelationState = {
   leftJoinAssociations: string[];
   /** Association names registered via `eagerLoad()`. LEFT OUTER JOIN + result hydration via preload. */
   eagerLoadValues: string[];
+  /** SQL comments appended via `annotate(...)`. */
+  annotations: string[];
+  /** When true, accessing an association that wasn't preloaded throws. */
+  strictLoading: boolean;
+  /** Tables registered via `references()` — informational for now. */
+  referenceValues: string[];
   limitValue: number | null;
   offsetValue: number | null;
   distinctValue: boolean;
@@ -74,6 +80,9 @@ const emptyState = (): RelationState => ({
   joinAssociations: [],
   leftJoinAssociations: [],
   eagerLoadValues: [],
+  annotations: [],
+  strictLoading: false,
+  referenceValues: [],
   limitValue: null,
   offsetValue: null,
   distinctValue: false,
@@ -92,6 +101,9 @@ const cloneState = (state: RelationState): RelationState => ({
   joinAssociations: [...state.joinAssociations],
   leftJoinAssociations: [...state.leftJoinAssociations],
   eagerLoadValues: [...state.eagerLoadValues],
+  annotations: [...state.annotations],
+  strictLoading: state.strictLoading,
+  referenceValues: [...state.referenceValues],
   limitValue: state.limitValue,
   offsetValue: state.offsetValue,
   distinctValue: state.distinctValue,
@@ -238,6 +250,37 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   }
 
   /**
+   * Append a SQL comment to the generated query. Multiple calls
+   * accumulate. Mirrors Rails' `annotate('reason: nightly job')`.
+   */
+  annotate(...comments: string[]): Relation<T> {
+    return this.chain((s) => s.annotations.push(...comments));
+  }
+
+  /**
+   * Mark this relation as strict-loading. Reading an association that
+   * wasn't preloaded throws — useful for catching N+1 in development.
+   * (Currently informational on the relation; per-record enforcement
+   * is a follow-up.)
+   */
+  strictLoading(value = true): Relation<T> {
+    return this.chain((s) => {
+      s.strictLoading = value;
+    });
+  }
+
+  /**
+   * Inform the relation that a particular table is referenced by raw
+   * SQL conditions, so eager-loading switches to LEFT OUTER JOIN even
+   * without an explicit `eagerLoad` call. We currently record the
+   * names — explicit `eagerLoad` / `leftOuterJoins` still drives the
+   * SQL; this is here for parity.
+   */
+  references(...tableNames: string[]): Relation<T> {
+    return this.chain((s) => s.referenceValues.push(...tableNames));
+  }
+
+  /**
    * Combine this relation with another via OR. Both must target the same
    * model class and must not contain incompatible clauses (groups / orders).
    * The resulting WHERE clause is `(this.wheres) OR (other.wheres)`.
@@ -354,6 +397,11 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     if (this.state.offsetValue != null) manager.skip(this.state.offsetValue);
     if (this.state.distinctValue) manager.distinct(true);
     if (this.state.lockValue) manager.lock(this.state.lockValue === true ? true : this.state.lockValue);
+    if (this.state.annotations.length > 0) {
+      // Render annotations as a single `/* ... */` comment block — Rails'
+      // SelectStatement appends comments after the lock clause.
+      manager.comment(this.state.annotations.join(' '));
+    }
     return manager;
   }
 

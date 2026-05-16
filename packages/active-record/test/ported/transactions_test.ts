@@ -69,12 +69,36 @@ describe('Transactions — nested with savepoints', () => {
     expect(await Topic.count()).toBe(2);
   });
 
-  test.skip('requires_new flag (TODO: requiresNew option)', () => {});
-  test.skip('joinable / inner-most transaction (TODO)', () => {});
+  test('requiresNew flag forces a fresh savepoint', async () => {
+    // Inner transaction rolls back independently of the outer.
+    await Topic.transaction(async () => {
+      await Topic.create({ title: 'outer' });
+      try {
+        await Topic.transaction(async () => {
+          await Topic.create({ title: 'inner' });
+          throw new Error('rollback inner');
+        }, { requiresNew: true });
+      } catch {
+        /* expected */
+      }
+    });
+    const titles = (await Topic.pluck<string>('title')).sort();
+    expect(titles).toEqual(['outer']);
+  });
+
+  test.skip('joinable / inner-most transaction (TODO: opt-out savepoint)', () => {});
 });
 
 describe('Transactions — Rollback sentinel', () => {
-  test.skip('throw Rollback inside transaction rolls back silently (TODO: Rollback class semantics)', () => {});
+  test('throw new Rollback() rolls back without surfacing the error', async () => {
+    const { Rollback } = await import('../../src');
+    const result = await Topic.transaction(async () => {
+      await Topic.create({ title: 'will-roll-back' });
+      throw new Rollback();
+    });
+    expect(result).toBeUndefined();
+    expect(await Topic.exists({ title: 'will-roll-back' })).toBe(false);
+  });
 });
 
 describe('Transactions — after_commit / after_rollback', () => {

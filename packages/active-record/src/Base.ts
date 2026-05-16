@@ -23,7 +23,7 @@
 import { Arel, Nodes as ArelNodes } from '@arelts/arel';
 import type { Attribute as ArelAttribute, BindParamNode } from '@arelts/arel';
 import { Model, lookupType, tableize, type Type, type TypeRef } from '@arelts/active-model';
-import type { ConnectionAdapter } from './ConnectionAdapter';
+import { Rollback, type ConnectionAdapter } from './ConnectionAdapter';
 import { getConnection, setConnection } from './connection';
 import { buildAdapter } from './adapters';
 import type { ColumnInfo, ConnectionConfig } from './types';
@@ -185,6 +185,17 @@ const applyDependent = async (owner: Base, reflection: AssociationReflection): P
 // unused-import warning when it's only referenced by JSDoc samples.
 void pluralize;
 
+/** STI class registry — maps a type-column string (e.g. `'Manager'`) to its registered subclass. */
+const STI_REGISTRY = new Map<string, BaseConstructor>();
+
+const registerStiClass = (typeName: string, ctor: BaseConstructor): void => {
+  STI_REGISTRY.set(typeName, ctor);
+};
+
+const resolveStiClass = (typeName: string): BaseConstructor | null => {
+  return STI_REGISTRY.get(typeName) ?? null;
+};
+
 /**
  * Snapshot of record state at the moment a save/destroy participated in
  * a transaction. We restore from this if the surrounding tx rolls back.
@@ -258,6 +269,12 @@ type ClassState = {
   schemaLoaded: boolean;
   /** Attribute names that may be set on create but never updated thereafter. */
   readonlyAttributes: Set<string>;
+  /**
+   * STI type-name registered for this class (e.g. `'Manager'`). When set,
+   * inserts populate the `inheritanceColumn` automatically and queries on
+   * subclasses scope to this type.
+   */
+  stiTypeName: string | null;
 };
 
 const getState = (ctor: typeof Base): ClassState => {
@@ -274,6 +291,7 @@ const getState = (ctor: typeof Base): ClassState => {
     arelTable: null,
     schemaLoaded: false,
     readonlyAttributes: new Set(parentState?.readonlyAttributes),
+    stiTypeName: null,
   };
   Object.defineProperty(ctor, ARSTATE, { value: state, enumerable: false, configurable: true, writable: false });
   return state;
@@ -284,6 +302,8 @@ export class Base extends Model {
   static tableName: string | null = null;
   /** Primary key column name. */
   static primaryKey = 'id';
+  /** Column name used for Single Table Inheritance dispatch. Default: `'type'`. */
+  static inheritanceColumn = 'type';
 
   /** True after `save` has been called and succeeded at least once. */
   declare protected _persisted: boolean;
@@ -450,6 +470,28 @@ export class Base extends Model {
   }
 
   /**
+   * Register this class as a Single Table Inheritance subclass under
+   * `typeName`. After this:
+   *
+   *   - `new Klass()` automatically sets the inheritance column to
+   *     `typeName` on save.
+   *   - `Klass.all()` / `Klass.where(...)` automatically filter by that
+   *     type column.
+   *   - When loading rows from the parent class, the inheritance column
+   *     dispatches each row to its registered subclass instance.
+   */
+  static stiAs<This extends typeof Base>(this: This, typeName: string = this.name): This {
+    getState(this).stiTypeName = typeName;
+    registerStiClass(typeName, this as unknown as BaseConstructor);
+    return this;
+  }
+
+  /** The registered STI type name for this class (or `null` if none). */
+  static stiTypeName(): string | null {
+    return getState(this).stiTypeName;
+  }
+
+  /**
    * Mark one or more attributes as read-only. Mirrors Rails'
    * `attr_readonly`. Readonly attributes are written on INSERT but never
    * updated, even if the value changes in memory.
@@ -517,9 +559,18 @@ export class Base extends Model {
 
   /** Instantiate a record from a database row, skipping dirty tracking. */
   static instantiate<T extends Base>(this: new (values?: Record<string, unknown>) => T, row: Record<string, unknown>): T {
-    const record = new this();
-    // Bypass write-time casting and dirty tracking — hydrate raw.
-    // biome-ignore lint/suspicious/noExplicitAny: protected field access via constructor pattern
+    // STI dispatch: if the row carries a recognized inheritance-column
+    // value, route to the registered subclass instead of `this`.
+    const baseCtor = this as unknown as typeof Base;
+    const inheritanceCol = baseCtor.inheritanceColumn;
+    const typeValue = row[inheritanceCol];
+    let actualCtor: new (values?: Record<string, unknown>) => T = this;
+    if (typeof typeValue === 'string' && typeValue.length > 0) {
+      const resolved = resolveStiClass(typeValue);
+      if (resolved) actualCtor = resolved as unknown as new (values?: Record<string, unknown>) => T;
+    }
+    const record = new actualCtor();
+    // biome-ignore lint/suspicious/noExplicitAny: protected field access
     (record as any)._attributes.hydrate(row);
     // biome-ignore lint/suspicious/noExplicitAny: protected field access
     (record as any)._persisted = true;
@@ -589,6 +640,18 @@ export class Base extends Model {
 
   static eagerLoad<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).eagerLoad(...names);
+  }
+
+  static annotate<This extends typeof Base>(this: This, ...comments: string[]): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).annotate(...comments);
+  }
+
+  static references<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).references(...names);
+  }
+
+  static strictLoading<This extends typeof Base>(this: This, value = true): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).strictLoading(value);
   }
 
   static async find<This extends typeof Base>(this: This, ids: readonly unknown[]): Promise<InstanceType<This>[]>;
@@ -806,14 +869,18 @@ export class Base extends Model {
     return (this as unknown as typeof Base).deleteAll({ [this.primaryKey]: list } as never);
   }
 
-  static async transaction<T>(this: typeof Base, fn: (tx: ConnectionAdapter) => Promise<T>): Promise<T> {
+  static async transaction<T>(
+    this: typeof Base,
+    fn: (tx: ConnectionAdapter) => Promise<T>,
+    options?: { requiresNew?: boolean },
+  ): Promise<T | undefined> {
     const queue: TxQueue = { onCommit: [], onRollback: [] };
     transactionStack.push(queue);
     try {
-      const result = await this.connection().transaction(async (adapter) => fn(adapter));
-      // Move our commit callbacks to the parent queue (if any) so they fire
-      // only once the OUTERMOST transaction commits. If we're the outermost,
-      // run them now.
+      const result = await this.connection().transaction(
+        async (adapter) => fn(adapter),
+        options,
+      );
       transactionStack.pop();
       if (transactionStack.length > 0) {
         const parent = transactionStack[transactionStack.length - 1]!;
@@ -828,6 +895,8 @@ export class Base extends Model {
       for (const cb of queue.onRollback) {
         try { await cb(); } catch { /* swallow secondary errors */ }
       }
+      // Rails' `Rollback` sentinel rolls back silently — callers see `undefined`.
+      if (err instanceof Rollback) return undefined;
       throw err;
     }
   }
@@ -919,10 +988,11 @@ export class Base extends Model {
    */
   async withLock<R>(fn: (record: this) => Promise<R>, lockClause: string | true = true): Promise<R> {
     const ctor = this.constructor as typeof Base;
-    return ctor.transaction(async () => {
+    const result = await ctor.transaction(async () => {
       await this.lockOrThrow(lockClause);
       return fn(this);
     });
+    return result as R;
   }
 
   /** Re-read from the DB, replacing any in-memory changes. */
@@ -937,6 +1007,24 @@ export class Base extends Model {
     // biome-ignore lint/suspicious/noExplicitAny: protected field rehydration
     (this as any)._attributes.hydrate(row.attributes());
     return this;
+  }
+
+  /**
+   * Return a new instance of `klass` with the same attribute values.
+   * Mirrors Rails' `record.becomes(OtherClass)` — useful when toggling
+   * STI subclass identity. Preserves `_persisted` and `_destroyed`.
+   */
+  becomes<U extends Base>(klass: new (values?: Record<string, unknown>) => U): U {
+    const other = new klass();
+    // biome-ignore lint/suspicious/noExplicitAny: protected field copy
+    (other as any)._attributes.hydrate(this.attributes());
+    // biome-ignore lint/suspicious/noExplicitAny: protected field copy
+    (other as any)._persisted = this._persisted;
+    // biome-ignore lint/suspicious/noExplicitAny: protected field copy
+    (other as any)._destroyed = this._destroyed;
+    // Copy the errors collection
+    for (const entry of this.errors) other.errors.add(entry.attribute, entry.message, entry as never);
+    return other;
   }
 
   /** Update `updated_at` (and optionally other columns) without changing any business data. */
@@ -990,6 +1078,11 @@ export class Base extends Model {
     const table = ctor.arelTable();
     const schema = ctor.attributesSchema();
     this.maybeStampTimestamps(true);
+    // STI: stamp the inheritance column with the registered type name.
+    const stiName = ctor.stiTypeName();
+    if (stiName && schema.has(ctor.inheritanceColumn) && this.readAttribute(ctor.inheritanceColumn) == null) {
+      this.writeAttribute(ctor.inheritanceColumn, stiName);
+    }
 
     const im = new Arel.InsertManager(table);
     const pairs: Array<[ArelAttribute, BindParamNode]> = [];
