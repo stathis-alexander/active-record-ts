@@ -54,7 +54,13 @@ describe('Dirty', () => {
     expect(model.changes()['name']).toEqual([null, 'John']);
   });
 
-  test.skip('checking if an attribute changed to particular value (TODO: name_changed?(from:, to:))', () => {});
+  test('per-attribute helpers — nameChanged() / nameWas() / nameChange()', () => {
+    expect((model as unknown as { nameChanged: () => boolean }).nameChanged()).toBe(false);
+    model.name = 'Ringo';
+    expect((model as unknown as { nameChanged: () => boolean }).nameChanged()).toBe(true);
+    expect((model as unknown as { nameWas: () => unknown }).nameWas()).toBeNull();
+    expect((model as unknown as { nameChange: () => [unknown, unknown] | null }).nameChange()).toEqual([null, 'Ringo']);
+  });
 
   test.skip('changes accessible through strings and symbols (N/A: TS uses string keys)', () => {});
 
@@ -68,7 +74,13 @@ describe('Dirty', () => {
 
   test.skip('attribute mutation — `name_will_change!` (TODO: mutate-then-mark)', () => {});
 
-  test.skip('resetting attribute — `restore_name!` (TODO: per-attribute restore)', () => {});
+  test('resetting attribute — `restoreName()`', () => {
+    model.name = 'Bob';
+    // biome-ignore lint/suspicious/noExplicitAny: per-attribute helper
+    (model as any).restoreName();
+    expect(model.name).toBeNull();
+    expect(model.attributeChanged('name')).toBe(false);
+  });
 
   test('setting color to same value should not result in change being recorded', () => {
     model.color = 'red';

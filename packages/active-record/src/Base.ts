@@ -99,13 +99,25 @@ const ARSTATE = Symbol.for('@arelts/active-record:state');
 type ClassState = {
   arelTable: Arel.Table | null;
   schemaLoaded: boolean;
+  /** Attribute names that may be set on create but never updated thereafter. */
+  readonlyAttributes: Set<string>;
 };
 
 const getState = (ctor: typeof Base): ClassState => {
   if (Object.prototype.hasOwnProperty.call(ctor, ARSTATE)) {
     return (ctor as unknown as { [ARSTATE]: ClassState })[ARSTATE];
   }
-  const state: ClassState = { arelTable: null, schemaLoaded: false };
+  // Walk the prototype chain so subclasses inherit then snapshot.
+  const parent = Object.getPrototypeOf(ctor) as typeof Base | null;
+  const parentState =
+    parent && parent !== (Function.prototype as unknown as typeof Base) && parent.name
+      ? getState(parent)
+      : null;
+  const state: ClassState = {
+    arelTable: null,
+    schemaLoaded: false,
+    readonlyAttributes: new Set(parentState?.readonlyAttributes),
+  };
   Object.defineProperty(ctor, ARSTATE, { value: state, enumerable: false, configurable: true, writable: false });
   return state;
 };
@@ -176,6 +188,22 @@ export class Base extends Model {
   static async disconnect(): Promise<void> {
     const adapter = getConnection(this);
     if (adapter) await adapter.disconnect();
+  }
+
+  /**
+   * Mark one or more attributes as read-only. Mirrors Rails'
+   * `attr_readonly`. Readonly attributes are written on INSERT but never
+   * updated, even if the value changes in memory.
+   */
+  static attrReadonly<This extends typeof Base>(this: This, ...names: string[]): This {
+    const state = getState(this);
+    for (const name of names) state.readonlyAttributes.add(name);
+    return this;
+  }
+
+  /** True when `name` is marked read-only on this class (or any ancestor). */
+  static isReadonlyAttribute(name: string): boolean {
+    return getState(this).readonlyAttributes.has(name);
   }
 
   /** Build the Arel table for this class, cached on the constructor. */
@@ -359,6 +387,49 @@ export class Base extends Model {
     const record = new this(values);
     await record.saveOrThrow();
     return record;
+  }
+
+  /**
+   * Find a record matching `conditions`; if none exists, build (but don't
+   * save) a new one with the matching attributes merged with `overrides`.
+   * Mirrors Rails' `find_or_initialize_by`.
+   */
+  static async findOrInitializeBy<This extends typeof Base>(
+    this: This,
+    conditions: Record<string, unknown>,
+    overrides: Record<string, unknown> = {},
+  ): Promise<InstanceType<This>> {
+    const existing = await (this as unknown as typeof Base).findBy(conditions as never);
+    if (existing) return existing as InstanceType<This>;
+    const Ctor = this as unknown as new (values?: Record<string, unknown>) => InstanceType<This>;
+    return new Ctor({ ...conditions, ...overrides });
+  }
+
+  /**
+   * Find a record matching `conditions`; if none exists, create one with
+   * the matching attributes merged with `overrides`. Mirrors Rails'
+   * `find_or_create_by`. Returns the record even when validation fails
+   * (caller can inspect `record.errors`).
+   */
+  static async findOrCreateBy<This extends typeof Base>(
+    this: This,
+    conditions: Record<string, unknown>,
+    overrides: Record<string, unknown> = {},
+  ): Promise<InstanceType<This>> {
+    const record = await (this as unknown as typeof Base).findOrInitializeBy(conditions, overrides);
+    if (!record.persisted) await record.save();
+    return record as InstanceType<This>;
+  }
+
+  /** `findOrCreateBy` but throws `RecordInvalid` when validation fails. */
+  static async findOrCreateByOrThrow<This extends typeof Base>(
+    this: This,
+    conditions: Record<string, unknown>,
+    overrides: Record<string, unknown> = {},
+  ): Promise<InstanceType<This>> {
+    const record = await (this as unknown as typeof Base).findOrInitializeBy(conditions, overrides);
+    if (!record.persisted) await record.saveOrThrow();
+    return record as InstanceType<This>;
   }
 
   /** Bulk delete via a single DELETE statement. Returns rows affected. */
@@ -579,7 +650,7 @@ export class Base extends Model {
     const table = ctor.arelTable();
     const schema = ctor.attributesSchema();
     this.maybeStampTimestamps(false);
-    const changed = this.changed();
+    const changed = this.changed().filter((name) => !ctor.isReadonlyAttribute(name));
     if (changed.length === 0) return;
     const um = new Arel.UpdateManager(table);
     const assignments: Record<string, BindParamNode> = {};

@@ -54,6 +54,10 @@ export class SchemaStatements {
   ): Promise<void> {
     const collected: CollectedTable = { columns: [], indexes: [], foreignKeys: [] };
     define(createTableBuilder(collected));
+    // `force: true` drops the existing table first (parity with Rails).
+    if (options.force) {
+      await this.dropTable(tableName, { ifExists: true });
+    }
     const lines: string[] = [];
     if (options.primaryKey !== false) {
       const pk = typeof options.primaryKey === 'string' ? options.primaryKey : 'id';
@@ -74,12 +78,29 @@ export class SchemaStatements {
     await this.adapter.exec(`DROP TABLE ${options.ifExists ? 'IF EXISTS ' : ''}${this.quote(tableName)}`);
   }
 
-  async addColumn(tableName: string, name: string, type: ColumnType, options: ColumnOptions = {}): Promise<void> {
-    const sql = `ALTER TABLE ${this.quote(tableName)} ADD COLUMN ${this.columnSql({ name, type, options })}`;
+  /** Rename an existing table. */
+  async renameTable(from: string, to: string): Promise<void> {
+    await this.adapter.exec(`ALTER TABLE ${this.quote(from)} RENAME TO ${this.quote(to)}`);
+  }
+
+  async addColumn(
+    tableName: string,
+    name: string,
+    type: ColumnType,
+    options: ColumnOptions & { ifNotExists?: boolean } = {},
+  ): Promise<void> {
+    if (options.ifNotExists && (await this.columnExists(tableName, name))) return;
+    const { ifNotExists: _ifNotExists, ...colOpts } = options;
+    const sql = `ALTER TABLE ${this.quote(tableName)} ADD COLUMN ${this.columnSql({ name, type, options: colOpts })}`;
     await this.adapter.exec(sql);
   }
 
-  async removeColumn(tableName: string, name: string): Promise<void> {
+  async removeColumn(
+    tableName: string,
+    name: string,
+    options: { ifExists?: boolean } = {},
+  ): Promise<void> {
+    if (options.ifExists && !(await this.columnExists(tableName, name))) return;
     await this.adapter.exec(`ALTER TABLE ${this.quote(tableName)} DROP COLUMN ${this.quote(name)}`);
   }
 
@@ -87,6 +108,36 @@ export class SchemaStatements {
     await this.adapter.exec(
       `ALTER TABLE ${this.quote(tableName)} RENAME COLUMN ${this.quote(from)} TO ${this.quote(to)}`,
     );
+  }
+
+  /**
+   * Change a column's type. SQLite doesn't support this in-place, so we
+   * delegate to the adapter when present, else emit an ALTER TABLE that
+   * Postgres / MySQL understand.
+   */
+  async changeColumn(
+    tableName: string,
+    name: string,
+    type: ColumnType,
+    options: ColumnOptions = {},
+  ): Promise<void> {
+    const adapterName = this.adapter.adapterName;
+    const colSpec = this.typeForColumn({ name, type, options });
+    if (adapterName === 'mysql') {
+      await this.adapter.exec(`ALTER TABLE ${this.quote(tableName)} MODIFY ${this.quote(name)} ${colSpec}`);
+      return;
+    }
+    if (adapterName === 'postgres' || adapterName === 'postgres-bun') {
+      await this.adapter.exec(`ALTER TABLE ${this.quote(tableName)} ALTER COLUMN ${this.quote(name)} TYPE ${colSpec}`);
+      return;
+    }
+    throw new Error(`changeColumn is not supported on adapter "${adapterName}"`);
+  }
+
+  /** Whether a column already exists on the named table. */
+  async columnExists(tableName: string, columnName: string): Promise<boolean> {
+    const cols = await this.adapter.columns(tableName).catch(() => []);
+    return cols.some((c) => c.name === columnName);
   }
 
   async addIndex(tableName: string, columns: string | string[], options: IndexOptions = {}): Promise<void> {

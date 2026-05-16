@@ -54,16 +54,34 @@ export abstract class Migration {
     return this.schema.dropTable(name, options);
   }
 
-  protected addColumn(table: string, name: string, type: ColumnType, options?: ColumnOptions): Promise<void> {
+  protected renameTable(from: string, to: string): Promise<void> {
+    return this.schema.renameTable(from, to);
+  }
+
+  protected addColumn(
+    table: string,
+    name: string,
+    type: ColumnType,
+    options?: ColumnOptions & { ifNotExists?: boolean },
+  ): Promise<void> {
     return this.schema.addColumn(table, name, type, options);
   }
 
-  protected removeColumn(table: string, name: string): Promise<void> {
-    return this.schema.removeColumn(table, name);
+  protected removeColumn(table: string, name: string, options?: { ifExists?: boolean }): Promise<void> {
+    return this.schema.removeColumn(table, name, options);
   }
 
   protected renameColumn(table: string, from: string, to: string): Promise<void> {
     return this.schema.renameColumn(table, from, to);
+  }
+
+  protected changeColumn(
+    table: string,
+    name: string,
+    type: ColumnType,
+    options?: ColumnOptions,
+  ): Promise<void> {
+    return this.schema.changeColumn(table, name, type, options);
   }
 
   protected addIndex(table: string, columns: string | string[], options?: IndexOptions): Promise<void> {

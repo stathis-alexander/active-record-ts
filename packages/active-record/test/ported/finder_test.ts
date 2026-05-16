@@ -58,6 +58,36 @@ describe('Finder — find by id', () => {
   test.skip('find_by_title_and_id_with_hash (TODO: dynamic finder)', () => {});
 });
 
+describe('Finder — find_or_initialize_by / find_or_create_by', () => {
+  test('findOrInitializeBy returns matching record when one exists', async () => {
+    const t = await Topic.findOrInitializeBy({ title: 'first' });
+    expect(t.persisted).toBe(true);
+  });
+
+  test('findOrInitializeBy builds (does not save) when missing', async () => {
+    const t = await Topic.findOrInitializeBy({ title: 'brand-new' });
+    expect(t.persisted).toBe(false);
+    expect(t.readAttribute('title')).toBe('brand-new');
+  });
+
+  test('findOrInitializeBy merges overrides', async () => {
+    const t = await Topic.findOrInitializeBy({ title: 'brand-new' }, { author_name: 'mira' });
+    expect(t.readAttribute('author_name')).toBe('mira');
+  });
+
+  test('findOrCreateBy persists when missing', async () => {
+    const t = await Topic.findOrCreateBy({ title: 'newly-created' });
+    expect(t.persisted).toBe(true);
+    expect(await Topic.exists({ title: 'newly-created' })).toBe(true);
+  });
+
+  test('findOrCreateBy returns the existing record otherwise', async () => {
+    const t = await Topic.findOrCreateBy({ title: 'first' });
+    expect(t.id).toBe(1);
+    expect(await Topic.count()).toBe(3);
+  });
+});
+
 describe('Finder — find_by', () => {
   test('findBy by single attribute', async () => {
     const t = await Topic.findBy({ author_name: 'Sandy' });
