@@ -13,6 +13,20 @@ export {
 } from './adapters';
 export type { AdapterName, ColumnInfo, ConnectionConfig, ExecResult, Row } from './types';
 export { getConnection, setConnection, clearConnection } from './connection';
+export {
+  defineAssociationAccessor,
+  getAssociations,
+  lookupAssociation,
+  registerAssociation,
+  registerPolymorphicClass,
+  resolvePolymorphicClass,
+  type AssociationKind,
+  type AssociationReflection,
+  type BelongsToOptions,
+  type ClassRef,
+  type HasManyOptions,
+  type HasOneOptions,
+} from './associations';
 export { Migration, type MigrationConstructor } from './Migration';
 export { Migrator } from './Migrator';
 export { SchemaStatements } from './schema/SchemaStatements';

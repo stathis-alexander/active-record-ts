@@ -29,6 +29,16 @@ import { buildAdapter } from './adapters';
 import type { ColumnInfo, ConnectionConfig } from './types';
 import { Relation, RecordNotFound } from './Relation';
 import { buildPredicate, type WhereInput } from './predicates';
+import {
+  defineAssociationAccessor,
+  registerAssociation,
+  registerPolymorphicClass,
+  type AssociationReflection,
+  type BelongsToOptions,
+  type HasManyOptions,
+  type HasOneOptions,
+} from './associations';
+import { pluralize } from '@arelts/active-model';
 
 /** Thrown when `save!` fails validation. */
 export class RecordInvalid extends Error {
@@ -129,6 +139,51 @@ const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
     });
   }
 };
+
+/**
+ * Infer the FK column on the owned side from the declaring class name.
+ * `User` -> `user_id`, `BlogPost` -> `blog_post_id`. Matches Rails'
+ * default naming.
+ */
+const inferForeignKeyFor = (ctor: { name: string }): string => {
+  const snake = ctor.name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+  return `${snake}_id`;
+};
+
+/** Apply a has_many/has_one `dependent:` action when the owner is being destroyed. */
+const applyDependent = async (owner: Base, reflection: AssociationReflection): Promise<void> => {
+  const id = owner.readAttribute(reflection.primaryKey);
+  if (id == null) return;
+  const klass = reflection.classRef ? reflection.classRef() : null;
+  if (!klass) return;
+  const conditions: Record<string, unknown> = { [reflection.foreignKey]: id };
+  if (reflection.as) conditions[`${reflection.as}_type`] = owner.constructor.name;
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic call on subclass
+  const Cls = klass as any;
+  switch (reflection.dependent) {
+    case 'destroy': {
+      const records = await Cls.where(conditions).toArray();
+      for (const r of records) await r.destroy();
+      return;
+    }
+    case 'delete_all':
+      await Cls.deleteAll(conditions);
+      return;
+    case 'nullify': {
+      const update: Record<string, unknown> = { [reflection.foreignKey]: null };
+      if (reflection.as) update[`${reflection.as}_type`] = null;
+      await Cls.updateAll(update, conditions);
+      return;
+    }
+  }
+};
+
+// `pluralize` is imported above to keep us tree-shake-friendly; suppress the
+// unused-import warning when it's only referenced by JSDoc samples.
+void pluralize;
 
 /**
  * Stack of pending transaction queues. Each entry collects callbacks
@@ -249,6 +304,106 @@ export class Base extends Model {
   static async disconnect(): Promise<void> {
     const adapter = getConnection(this);
     if (adapter) await adapter.disconnect();
+  }
+
+  // ──────────────────────────── associations ────────────────────────────
+
+  /**
+   * Declare a `belongs_to` association. The FK column lives on this
+   * class; the accessor returns `Promise<Target | null>`.
+   *
+   *   class Post extends Base {}
+   *   Post.belongsTo('user', { class: () => User });
+   *   // post.user resolves to a User or null based on post.user_id.
+   *
+   * Pass `polymorphic: true` to add a `${name}_type` column reference
+   * and resolve the target via `Base.polymorphicAs(...)` at access time.
+   */
+  static belongsTo<This extends typeof Base>(this: This, name: string, options: BelongsToOptions = {}): This {
+    const foreignKey = options.foreignKey ?? `${name}_id`;
+    const reflection: AssociationReflection = {
+      kind: 'belongs_to',
+      name,
+      classRef: options.class ?? null,
+      foreignKey,
+      primaryKey: options.primaryKey ?? 'id',
+      polymorphic: !!options.polymorphic,
+      foreignType: options.polymorphic ? `${name}_type` : undefined,
+      optional: options.optional ?? true,
+    };
+    registerAssociation(this, reflection);
+    defineAssociationAccessor(this as unknown as typeof Base, reflection);
+    return this;
+  }
+
+  /**
+   * Declare a `has_many` association. The FK column lives on the OWNED
+   * (target) class; the accessor returns a chainable `Relation<Target>`.
+   *
+   *   class User extends Base {}
+   *   User.hasMany('posts', { class: () => Post });
+   *   // user.posts is a Relation<Post> filtered by user_id = user.id.
+   */
+  static hasMany<This extends typeof Base>(this: This, name: string, options: HasManyOptions = {}): This {
+    const targetCtor = options.class?.();
+    const inferredFk = inferForeignKeyFor(this);
+    const reflection: AssociationReflection = {
+      kind: 'has_many',
+      name,
+      classRef: options.class ?? null,
+      foreignKey: options.foreignKey ?? (options.as ? `${options.as}_id` : inferredFk),
+      primaryKey: options.primaryKey ?? this.primaryKey,
+      polymorphic: false,
+      as: options.as,
+      optional: true,
+      dependent: options.dependent,
+    };
+    registerAssociation(this, reflection);
+    defineAssociationAccessor(this as unknown as typeof Base, reflection);
+    if (targetCtor && options.dependent) {
+      // Hook a destroy callback to enforce :dependent at owner-destroy time.
+      this.beforeDestroy(async (record) => {
+        await applyDependent(record, reflection);
+      });
+    }
+    return this;
+  }
+
+  /**
+   * Declare a `has_one` association — the inverse of a single
+   * `belongs_to`. Returns `Promise<Target | null>`.
+   */
+  static hasOne<This extends typeof Base>(this: This, name: string, options: HasOneOptions = {}): This {
+    const inferredFk = inferForeignKeyFor(this);
+    const reflection: AssociationReflection = {
+      kind: 'has_one',
+      name,
+      classRef: options.class ?? null,
+      foreignKey: options.foreignKey ?? (options.as ? `${options.as}_id` : inferredFk),
+      primaryKey: options.primaryKey ?? this.primaryKey,
+      polymorphic: false,
+      as: options.as,
+      optional: true,
+      dependent: options.dependent,
+    };
+    registerAssociation(this, reflection);
+    defineAssociationAccessor(this as unknown as typeof Base, reflection);
+    if (options.class && options.dependent) {
+      this.beforeDestroy(async (record) => {
+        await applyDependent(record, reflection);
+      });
+    }
+    return this;
+  }
+
+  /**
+   * Register a polymorphic class name → class mapping. Called once per
+   * class that participates in a polymorphic `belongs_to`. Default name
+   * is the class name verbatim (Rails uses the class's `to_s`).
+   */
+  static polymorphicAs<This extends typeof Base>(this: This, typeName: string = this.name): This {
+    registerPolymorphicClass(typeName, this as unknown as BaseConstructor);
+    return this;
   }
 
   /**

@@ -29,6 +29,7 @@ export class Post extends Base {
   declare title: string;
   declare body: string;
   declare type: string;
+  declare author_id: number;
 }
 
 export class Developer extends Base {
@@ -46,6 +47,8 @@ export class Comment extends Base {
   static override tableName = 'comments';
   declare body: string;
   declare post_id: number;
+  declare commentable_id: number;
+  declare commentable_type: string;
 }
 
 export class Person extends Base {
@@ -76,6 +79,7 @@ class CreatePosts extends Migration {
       t.string('title');
       t.text('body');
       t.string('type');
+      t.integer('author_id');
     });
   }
 }
@@ -102,6 +106,8 @@ class CreateComments extends Migration {
     await this.createTable('comments', (t) => {
       t.text('body');
       t.integer('post_id');
+      t.integer('commentable_id');
+      t.string('commentable_type');
     });
   }
 }
