@@ -378,6 +378,10 @@ export class Base extends Model {
   static primaryKey = 'id';
   /** Column name used for Single Table Inheritance dispatch. Default: `'type'`. */
   static inheritanceColumn = 'type';
+  /** Prepended to the effective table name. e.g. `'app_'` → `app_users`. */
+  static tablePrefix = '';
+  /** Appended to the effective table name. e.g. `'_v2'` → `users_v2`. */
+  static tableSuffix = '';
 
   /** True after `save` has been called and succeeded at least once. */
   declare protected _persisted: boolean;
@@ -409,10 +413,10 @@ export class Base extends Model {
 
   // ──────────────────────────── class-level configuration ────────────────────────────
 
-  /** Resolve the effective table name, using the inflector when unset. */
+  /** Resolve the effective table name, using the inflector when unset and applying prefix/suffix. */
   static effectiveTableName(): string {
-    if (typeof this.tableName === 'string' && this.tableName.length > 0) return this.tableName;
-    return tableize(this.name);
+    const core = typeof this.tableName === 'string' && this.tableName.length > 0 ? this.tableName : tableize(this.name);
+    return `${this.tablePrefix}${core}${this.tableSuffix}`;
   }
 
   /** Establish a connection for this class (and its subclasses). */
@@ -830,6 +834,20 @@ export class Base extends Model {
 
   static async ids(this: typeof Base): Promise<unknown[]> {
     return new Relation(this as unknown as BaseConstructor<Base>).ids();
+  }
+
+  static findEach<This extends typeof Base>(
+    this: This,
+    options?: Parameters<Relation<InstanceType<This>>['findEach']>[0],
+  ): AsyncIterableIterator<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).findEach(options);
+  }
+
+  static inBatches<This extends typeof Base>(
+    this: This,
+    options?: Parameters<Relation<InstanceType<This>>['inBatches']>[0],
+  ): AsyncIterableIterator<InstanceType<This>[]> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).inBatches(options);
   }
 
   // ──────────────────────────── class-level persistence ────────────────────────────

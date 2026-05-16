@@ -111,9 +111,14 @@ export class SchemaStatements {
   }
 
   /**
-   * Change a column's type. SQLite doesn't support this in-place, so we
-   * delegate to the adapter when present, else emit an ALTER TABLE that
-   * Postgres / MySQL understand.
+   * Change a column's type. Postgres / MySQL emit native ALTER TABLE; SQLite
+   * doesn't support that in-place so we follow the documented
+   * "create new table, copy data, swap names" recipe:
+   *
+   *   1. Introspect the current column list.
+   *   2. Build a tmp table with the new column type substituted in.
+   *   3. INSERT INTO tmp SELECT ... FROM original.
+   *   4. Drop original; rename tmp → original.
    */
   async changeColumn(
     tableName: string,
@@ -131,7 +136,45 @@ export class SchemaStatements {
       await this.adapter.exec(`ALTER TABLE ${this.quote(tableName)} ALTER COLUMN ${this.quote(name)} TYPE ${colSpec}`);
       return;
     }
+    if (adapterName === 'sqlite') {
+      await this.rebuildSqliteTable(tableName, name, { name, type, options });
+      return;
+    }
     throw new Error(`changeColumn is not supported on adapter "${adapterName}"`);
+  }
+
+  /**
+   * Rebuild a SQLite table swapping one column's type. We deliberately
+   * keep this minimal: the new column is added as a single-line column
+   * spec; primary-key / index / FK preservation is best-effort (PK is
+   * re-emitted in the new schema, indexes are not — recreate them
+   * separately if needed).
+   */
+  private async rebuildSqliteTable(tableName: string, columnName: string, newCol: ColumnDefinition): Promise<void> {
+    const cols = await this.adapter.columns(tableName);
+    const colNames = cols.map((c) => c.name);
+    const tmpName = `${tableName}__tmp_${Math.random().toString(36).slice(2, 8)}`;
+    const pkName = await this.adapter.primaryKey(tableName);
+
+    const lines: string[] = [];
+    for (const c of cols) {
+      if (c.name === columnName) {
+        lines.push(this.columnSql(newCol));
+      } else if (c.isPrimaryKey && c.name === pkName) {
+        lines.push(this.primaryKeySql(c.name));
+      } else {
+        // Use the raw SQL type from reflection rather than re-deriving.
+        const lineParts: string[] = [this.quote(c.name), c.sqlType];
+        if (!c.null) lineParts.push('NOT NULL');
+        lines.push(lineParts.join(' '));
+      }
+    }
+
+    await this.adapter.exec(`CREATE TABLE ${this.quote(tmpName)} (\n  ${lines.join(',\n  ')}\n)`);
+    const quotedCols = colNames.map((n) => this.quote(n)).join(', ');
+    await this.adapter.exec(`INSERT INTO ${this.quote(tmpName)} (${quotedCols}) SELECT ${quotedCols} FROM ${this.quote(tableName)}`);
+    await this.adapter.exec(`DROP TABLE ${this.quote(tableName)}`);
+    await this.adapter.exec(`ALTER TABLE ${this.quote(tmpName)} RENAME TO ${this.quote(tableName)}`);
   }
 
   /** Whether a column already exists on the named table. */

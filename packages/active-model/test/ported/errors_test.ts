@@ -322,8 +322,34 @@ describe('Errors', () => {
     expect(person.errors.fullMessages).toContain('Name cannot be blank');
   });
 
-  test.skip('details / details_for / structured details payload (TODO: details)', () => {});
-  test.skip('group_by_attribute (TODO)', () => {});
+  test('details returns the structured error payload', () => {
+    const errors = new Errors();
+    errors.add('name', 'invalid');
+    errors.add('name', 'too_short', { count: 5 });
+    errors.add('age', 'greater_than', { count: 18 });
+    expect(errors.details).toEqual({
+      name: [{ error: 'invalid' }, { error: 'too_short', count: 5 }],
+      age: [{ error: 'greater_than', count: 18 }],
+    });
+  });
+
+  test('groupByAttribute returns ErrorObjects per attribute', async () => {
+    const { ErrorObject } = await import('../../src');
+    const errors = new Errors();
+    errors.add('name', 'invalid');
+    errors.add('name', 'too_short');
+    errors.add('age', 'present');
+    const grouped = errors.groupByAttribute();
+    expect(grouped['name']?.length).toBe(2);
+    expect(grouped['age']?.length).toBe(1);
+    expect(grouped['name']?.[0]).toBeInstanceOf(ErrorObject);
+  });
+
+  test('get(attr) is an alias for on(attr)', () => {
+    const errors = new Errors();
+    errors.add('name', 'is bad');
+    expect(errors.get('name')).toEqual(errors.on('name'));
+  });
   test('delete returns the deleted messages', () => {
     const errors = new Errors();
     errors.add('name', 'invalid');

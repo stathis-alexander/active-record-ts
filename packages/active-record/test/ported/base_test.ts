@@ -52,7 +52,13 @@ describe('BasicsTest — table name guessing', () => {
     expect(Person.effectiveTableName()).toBe('people');
   });
 
-  test.skip('test_table_name_guesses_with_prefixes_and_suffixes (TODO: prefix/suffix)', () => {});
+  test('test_table_name_guesses_with_prefixes_and_suffixes', () => {
+    class Widget extends Post {
+      static override tablePrefix = 'app_';
+      static override tableSuffix = '_v2';
+    }
+    expect(Widget.effectiveTableName()).toBe('app_posts_v2');
+  });
   test.skip('test_singular_table_name_guesses (TODO: singular tables)', () => {});
   test.skip('test_table_name_for_base_class (TODO: abstract class)', () => {});
 });

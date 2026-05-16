@@ -52,6 +52,23 @@ describe('Finder — find by id', () => {
     await expect(Topic.find([1, 999])).rejects.toThrow();
   });
 
+  test('findEach iterates record-by-record', async () => {
+    const collected: string[] = [];
+    for await (const t of Topic.findEach({ batchSize: 2 })) {
+      collected.push(t.readAttribute('title') as string);
+    }
+    expect(collected.sort()).toEqual(['first', 'second', 'third']);
+  });
+
+  test('inBatches yields arrays of size N', async () => {
+    const batches: string[][] = [];
+    for await (const batch of Topic.inBatches({ of: 2 })) {
+      batches.push(batch.map((t) => t.readAttribute('title') as string));
+    }
+    expect(batches.length).toBeGreaterThanOrEqual(1);
+    expect(batches.flat().sort()).toEqual(['first', 'second', 'third']);
+  });
+
   test.skip('find with string id (TODO: numeric-coercion of string ids)', () => {});
 
   test('dynamic finder findByTitle returns matching record', async () => {

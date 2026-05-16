@@ -48,6 +48,8 @@ type RelationState = {
   havingClauses: Expression[];
   selectValues: Expression[];
   joinValues: Expression[];
+  /** Override FROM clause (raw SQL string or subquery). null = use table. */
+  fromValue: string | null;
   /** Association names registered via `includes()` / `preload()`. */
   preloadValues: string[];
   /** Association names registered via `joins()`. INNER JOIN. */
@@ -83,6 +85,7 @@ const emptyState = (): RelationState => ({
   annotations: [],
   strictLoading: false,
   referenceValues: [],
+  fromValue: null,
   limitValue: null,
   offsetValue: null,
   distinctValue: false,
@@ -104,6 +107,7 @@ const cloneState = (state: RelationState): RelationState => ({
   annotations: [...state.annotations],
   strictLoading: state.strictLoading,
   referenceValues: [...state.referenceValues],
+  fromValue: state.fromValue,
   limitValue: state.limitValue,
   offsetValue: state.offsetValue,
   distinctValue: state.distinctValue,
@@ -281,6 +285,40 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   }
 
   /**
+   * Override the FROM clause. Accepts a raw SQL string or a Relation
+   * (rendered as a subquery). Mirrors Rails' `from(...)`.
+   *
+   *   User.from(`(SELECT * FROM users WHERE active) AS users`).where(...)
+   */
+  from(value: string | Relation<Base>): Relation<T> {
+    let frag: string;
+    if (typeof value === 'string') {
+      frag = value;
+    } else {
+      const [sql, _binds] = value.toSql();
+      void _binds;
+      frag = `(${sql})`;
+    }
+    return this.chain((s) => {
+      s.fromValue = frag;
+    });
+  }
+
+  /**
+   * Extend the relation's instance shape with extra properties /
+   * methods. Each call mutates the returned Relation by copying the
+   * extensions onto it. Mirrors Rails' `extending(Module)`.
+   *
+   *   const scope = User.all().extending({ withFooter: function() { return [...this, 'footer'] } });
+   *   scope.withFooter();
+   */
+  extending<E extends object>(extension: E): Relation<T> & E {
+    const next = new Relation<T>(this.klass, cloneState(this.state));
+    Object.assign(next, extension);
+    return next as Relation<T> & E;
+  }
+
+  /**
    * Combine this relation with another via OR. Both must target the same
    * model class and must not contain incompatible clauses (groups / orders).
    * The resulting WHERE clause is `(this.wheres) OR (other.wheres)`.
@@ -372,6 +410,9 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   /** Build a `SelectManager` from the current state. */
   buildArel(): SelectManager {
     const manager = this.table.from();
+    if (this.state.fromValue != null) {
+      manager.from(this.state.fromValue);
+    }
     if (this.state.selectValues.length > 0) {
       manager.project(...this.state.selectValues);
     } else {
@@ -591,6 +632,43 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
 
   async ids(): Promise<unknown[]> {
     return this.pluck(this.klass.primaryKey);
+  }
+
+  /**
+   * Iterate records in batches, yielding each batch as an array.
+   * Mirrors Rails' `in_batches`. Default batch size is 1000.
+   *
+   *   for await (const batch of User.where(...).inBatches({ of: 100 })) {
+   *     for (const u of batch) ...
+   *   }
+   */
+  async *inBatches(options: { of?: number; start?: unknown } = {}): AsyncIterableIterator<T[]> {
+    const size = options.of ?? 1000;
+    const pk = this.klass.primaryKey;
+    let cursor: unknown = options.start ?? null;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let batchRel: Relation<T> = this.order({ [pk]: 'asc' }).limit(size);
+      if (cursor != null) {
+        batchRel = batchRel.where([`"${pk}" > ?`, cursor]);
+      }
+      const batch = await batchRel.toArray();
+      if (batch.length === 0) return;
+      yield batch;
+      if (batch.length < size) return;
+      cursor = batch[batch.length - 1]!.readAttribute(pk);
+    }
+  }
+
+  /**
+   * Iterate records one at a time. Internally batches via `inBatches`.
+   * Mirrors Rails' `find_each`. Pass `batchSize` to tune.
+   */
+  async *findEach(options: { batchSize?: number; start?: unknown } = {}): AsyncIterableIterator<T> {
+    const size = options.batchSize ?? 1000;
+    for await (const batch of this.inBatches({ of: size, start: options.start })) {
+      for (const r of batch) yield r;
+    }
   }
 
   // ──────────────────────────── PromiseLike — await relation directly ────────────────────────────
