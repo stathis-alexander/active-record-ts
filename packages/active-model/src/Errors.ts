@@ -82,7 +82,8 @@ export class Errors {
   }
 }
 
+/** Rails-style humanize: split camelCase / snake_case, lower-case everything, then upcase only the first letter. */
 const humanize = (attribute: string): string => {
-  const spaced = attribute.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+  const spaced = attribute.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
