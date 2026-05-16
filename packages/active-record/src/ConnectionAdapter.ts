@@ -119,6 +119,9 @@ export abstract class ConnectionAdapter {
   /** Convert an arel `TreeManager` (or AST node) into `[sql, binds]`. */
   toSql(manager: TreeManager | object): [string, unknown[]] {
     const visitor = this.arelVisitor();
+    // PG's visitor caches a running bind-placeholder index; reset before each call.
+    const resettable = visitor as { resetBindIndex?: () => void };
+    resettable.resetBindIndex?.();
     const collector = new Arel.Collectors.Composite(new Arel.Collectors.SqlString(), new Arel.Collectors.Bind());
     const target = manager instanceof TreeManager ? manager.ast : manager;
     const [sql, binds] = visitor.accept(target, collector).value();

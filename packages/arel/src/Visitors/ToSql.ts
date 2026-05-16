@@ -91,14 +91,6 @@ import type {
 import { isNull } from '../utilities/nodes';
 import { Visitor } from './Visitor';
 
-const quoteIdentifier = (name: string): string => `\"${name.replaceAll('"', '')}\"`;
-const quoteTableName = (name: string): string => {
-  const [schema, table, ...rest] = name.split('.');
-  if (!schema || rest.length > 0) throw new Error(`Invalid table name: ${name}`);
-  if (!table) return quoteIdentifier(schema);
-  return `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
-};
-
 export const quoteValue = (value: unknown): string => {
   if (value == null) return 'NULL';
   if (value instanceof Nodes.SqlLiteral) return value.toString();
@@ -130,6 +122,25 @@ export class ToSql extends Visitor {
   constructor(connection?: ConnectionLike) {
     super();
     this.connection = connection;
+  }
+
+  /**
+   * Quote an identifier (column, alias, named-window, etc.). Subclasses
+   * override to use a different delimiter — MySQL uses backticks.
+   */
+  protected quoteIdentifier(name: string): string {
+    return `\"${name.replaceAll('"', '')}\"`;
+  }
+
+  /**
+   * Quote a table name. Supports `schema.table` syntax by quoting each
+   * segment independently.
+   */
+  protected quoteTableName(name: string): string {
+    const [schema, table, ...rest] = name.split('.');
+    if (!schema || rest.length > 0) throw new Error(`Invalid table name: ${name}`);
+    if (!table) return this.quoteIdentifier(schema);
+    return `${this.quoteIdentifier(schema)}.${this.quoteIdentifier(table)}`;
   }
 
   compile(node: unknown, collector: Collector = new Collectors.SqlString()): unknown {
@@ -170,13 +181,13 @@ export class ToSql extends Visitor {
     if (relationName instanceof Nodes.SqlLiteral) {
       collector.collect(relationName.toString());
     } else if (typeof relationName === 'string') {
-      collector.collect(quoteTableName(relationName));
+      collector.collect(this.quoteTableName(relationName));
     } else {
       this.visit(relationName, collector);
     }
     collector.collect('.');
     if (typeof name === 'string') {
-      collector.collect(quoteIdentifier(name));
+      collector.collect(this.quoteIdentifier(name));
     } else {
       collector.collect((name as { toString(): string }).toString());
     }
@@ -345,7 +356,7 @@ export class ToSql extends Visitor {
   protected visitCte(node: CteNode, collector: Collector) {
     const name = node.name as string | { name?: string };
     const nameStr = typeof name === 'string' ? name : ((name as { name?: string }).name ?? String(name));
-    collector.collect(quoteTableName(nameStr));
+    collector.collect(this.quoteTableName(nameStr));
     collector.collect(' AS ');
     if (node.materialized === true) collector.collect('MATERIALIZED ');
     else if (node.materialized === false) collector.collect('NOT MATERIALIZED ');
@@ -555,7 +566,7 @@ export class ToSql extends Visitor {
       const columnNames = node.columns
         .map((c) => {
           const named = c as { name?: string };
-          return quoteIdentifier(named.name ?? String(c));
+          return this.quoteIdentifier(named.name ?? String(c));
         })
         .join(', ');
       collector.collect(` (${columnNames})`);
@@ -704,7 +715,7 @@ export class ToSql extends Visitor {
   }
 
   protected visitNamedWindow(node: NamedWindowNode, collector: Collector) {
-    collector.collect(quoteIdentifier(node.name));
+    collector.collect(this.quoteIdentifier(node.name));
     collector.collect(' AS ');
     return this.visitWindow(node, collector);
   }
@@ -781,7 +792,7 @@ export class ToSql extends Visitor {
     }
     if (typeof node.right === 'string') {
       collector = this.visit(node.left, collector);
-      collector.collect(' OVER ').collect(quoteIdentifier(node.right));
+      collector.collect(' OVER ').collect(this.quoteIdentifier(node.right));
       return collector;
     }
     return this.infixValue(node, collector, ' OVER ');
@@ -876,11 +887,11 @@ export class ToSql extends Visitor {
     if (node.name instanceof Nodes.SqlLiteral || (node.name && typeof node.name === 'object')) {
       this.visit(node.name, collector);
     } else {
-      collector.collect(quoteTableName(node.name));
+      collector.collect(this.quoteTableName(node.name));
     }
 
     if (node.tableAlias) {
-      collector.collect(' ').collect(quoteTableName(node.tableAlias));
+      collector.collect(' ').collect(this.quoteTableName(node.tableAlias));
     }
     return collector;
   }
@@ -891,7 +902,7 @@ export class ToSql extends Visitor {
     if (node.name instanceof Nodes.SqlLiteral) {
       collector.collect(node.name.toString());
     } else {
-      collector.collect(quoteTableName(node.name));
+      collector.collect(this.quoteTableName(node.name));
     }
     return collector;
   }
@@ -929,7 +940,7 @@ export class ToSql extends Visitor {
 
   protected visitUnqualifiedColumn(node: UnqualifiedColumnNode, collector: Collector) {
     const name = typeof node.expression === 'string' ? node.expression : node.expression?.name;
-    collector.collect(quoteIdentifier(name));
+    collector.collect(this.quoteIdentifier(name));
     return collector;
   }
 

@@ -65,8 +65,13 @@ export class PostgresAdapter extends ConnectionAdapter {
 
   async execute(sql: string, binds: unknown[] = []): Promise<Row[]> {
     const cast = this.castBinds(binds);
-    const result = await this.client().unsafe(sql, cast);
-    return Array.from(result) as Row[];
+    try {
+      const result = await this.client().unsafe(sql, cast);
+      return Array.from(result) as Row[];
+    } catch (err) {
+      if (process.env.AR_DEBUG_SQL) console.error('[pg.execute fail]', sql, cast);
+      throw err;
+    }
   }
 
   async exec(sql: string, binds: unknown[] = []): Promise<ExecResult> {

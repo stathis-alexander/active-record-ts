@@ -7,6 +7,8 @@
         "@types/bun": "latest",
         "husky": "^9.1.7",
         "lint-staged": "^16.1.5",
+        "mysql2": "^3.22.3",
+        "postgres": "^3.4.9",
       },
       "peerDependencies": {
         "typescript": "^5",

@@ -7,6 +7,7 @@ import { Arel } from '@arelts/arel';
 import { ConnectionAdapter, AdapterUnavailableError, type TransactionOptions } from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from '../types';
+import { MySQLAdapterVisitor } from './MySQLVisitor';
 
 // biome-ignore lint/suspicious/noExplicitAny: driver shape varies
 type Pool = any;
@@ -17,14 +18,14 @@ export class MySQLAdapter extends ConnectionAdapter {
   readonly adapterName = 'mysql';
   private pool: Pool | null = null;
   private txConn: Connection | null = null;
-  private visitor: Arel.Visitors.MySQL | null = null;
+  private visitor: MySQLAdapterVisitor | null = null;
 
   constructor(config: ConnectionConfig) {
     super(config);
   }
 
   arelVisitor(): Arel.Visitors.ToSql {
-    if (!this.visitor) this.visitor = new Arel.Visitors.MySQL();
+    if (!this.visitor) this.visitor = new MySQLAdapterVisitor();
     return this.visitor;
   }
 
@@ -131,6 +132,16 @@ export class MySQLAdapter extends ConnectionAdapter {
 
   override quoteIdentifier(name: string): string {
     return `\`${name.replace(/`/g, '``')}\``;
+  }
+
+  /** MySQL DATETIME expects `YYYY-MM-DD HH:MM:SS`, not ISO 8601 with `T`/`Z`. */
+  override castBind(value: unknown): unknown {
+    if (value instanceof Date) return value.toISOString().replace('T', ' ').replace('Z', '').replace(/\.\d+$/, '');
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+      return value.replace('T', ' ').replace('Z', '').replace(/\.\d+$/, '');
+    }
+    if (typeof value === 'bigint') return value.toString();
+    return value;
   }
 
   async tableExists(tableName: string): Promise<boolean> {
