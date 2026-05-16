@@ -59,6 +59,40 @@ export type BaseConstructor<T extends Base = Base> = {
   attributesSchema(): ReturnType<typeof Model.attributesSchema>;
 };
 
+/**
+ * Adapter-supplied column defaults arrive as either SQL fragments
+ * (`"0"`, `"'pending'"`, `"CURRENT_TIMESTAMP"`) or raw values, depending
+ * on the dialect. We unwrap quoted scalars, ignore function-call defaults
+ * (the database will fill them on INSERT), and pass everything else
+ * through the type's caster.
+ */
+const normalizeColumnDefault = (raw: unknown, type: Type): unknown => {
+  if (raw === null || raw === undefined) return undefined;
+  if (typeof raw === 'number' || typeof raw === 'boolean' || typeof raw === 'bigint') return type.cast(raw);
+  if (raw instanceof Date) return type.cast(raw);
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed === '') return undefined;
+    // Identify SQL function calls (e.g. CURRENT_TIMESTAMP, nextval(...), now()).
+    if (/^[a-zA-Z][a-zA-Z0-9_]*\s*\(/.test(trimmed)) return undefined;
+    const upper = trimmed.toUpperCase();
+    if (upper === 'CURRENT_TIMESTAMP' || upper === 'NULL') return undefined;
+    // SQLite emits boolean literals as `TRUE`/`FALSE` even when the column
+    // is INTEGER. Coerce to 1/0 so integer types can absorb them.
+    if (upper === 'TRUE') return type.cast(1);
+    if (upper === 'FALSE') return type.cast(0);
+    // Unwrap a quoted scalar (`'foo'` -> `foo`) and PG type-casts (`'foo'::text`).
+    let unquoted = trimmed;
+    const castIdx = unquoted.search(/::/);
+    if (castIdx > 0) unquoted = unquoted.slice(0, castIdx);
+    if (unquoted.length >= 2 && unquoted.startsWith("'") && unquoted.endsWith("'")) {
+      unquoted = unquoted.slice(1, -1).replace(/''/g, "'");
+    }
+    return type.cast(unquoted);
+  }
+  return type.cast(raw);
+};
+
 /** Symbol key for cached per-class state attached to constructors. */
 const ARSTATE = Symbol.for('@arelts/active-record:state');
 
@@ -169,7 +203,12 @@ export class Base extends Model {
     } catch {
       type = lookupType('value');
     }
-    this.attribute(col.name, type);
+    const defaultValue = normalizeColumnDefault(col.default, type);
+    if (defaultValue === undefined) {
+      this.attribute(col.name, type);
+    } else {
+      this.attribute(col.name, type, { default: defaultValue });
+    }
   }
 
   /** Instantiate a record from a database row, skipping dirty tracking. */
@@ -226,8 +265,13 @@ export class Base extends Model {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).none();
   }
 
-  static async find<This extends typeof Base>(this: This, id: unknown): Promise<InstanceType<This>> {
-    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).find(id);
+  static async find<This extends typeof Base>(this: This, ids: readonly unknown[]): Promise<InstanceType<This>[]>;
+  static async find<This extends typeof Base>(this: This, id: unknown): Promise<InstanceType<This>>;
+  static async find<This extends typeof Base>(this: This, ...ids: unknown[]): Promise<InstanceType<This>[]>;
+  static async find<This extends typeof Base>(this: This, idOrIds: unknown, ...rest: unknown[]): Promise<InstanceType<This> | InstanceType<This>[]> {
+    const relation = new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>);
+    if (rest.length > 0) return relation.find([idOrIds, ...rest]);
+    return relation.find(idOrIds as never);
   }
 
   static async findBy<This extends typeof Base>(
@@ -258,6 +302,22 @@ export class Base extends Model {
 
   static async count(column?: string): Promise<number> {
     return new Relation(this as unknown as BaseConstructor<Base>).count(column);
+  }
+
+  static async sum(column: string): Promise<number> {
+    return new Relation(this as unknown as BaseConstructor<Base>).sum(column);
+  }
+
+  static async minimum(column: string): Promise<number | null> {
+    return new Relation(this as unknown as BaseConstructor<Base>).minimum(column);
+  }
+
+  static async maximum(column: string): Promise<number | null> {
+    return new Relation(this as unknown as BaseConstructor<Base>).maximum(column);
+  }
+
+  static async average(column: string): Promise<number | null> {
+    return new Relation(this as unknown as BaseConstructor<Base>).average(column);
   }
 
   static async exists<This extends typeof Base>(

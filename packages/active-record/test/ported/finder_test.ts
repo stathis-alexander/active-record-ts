@@ -32,9 +32,26 @@ describe('Finder — find by id', () => {
     await expect(Topic.find(999)).rejects.toThrow(RecordNotFound);
   });
 
-  test.skip('find with multiple ids returns array (TODO: find(1, 2, 3))', () => {});
-  test.skip('find with array of ids (TODO)', () => {});
-  test.skip('find with ids preserves order (TODO)', () => {});
+  test('find with multiple ids returns array', async () => {
+    const records = await Topic.find([1, 2]);
+    expect(records.length).toBe(2);
+    expect(records.map((r) => r.id)).toEqual([1, 2]);
+  });
+
+  test('find with array of ids', async () => {
+    const records = await Topic.find([2, 3]);
+    expect(records.length).toBe(2);
+  });
+
+  test('find with ids preserves order', async () => {
+    const records = await Topic.find([3, 1, 2]);
+    expect(records.map((r) => r.id)).toEqual([3, 1, 2]);
+  });
+
+  test('find raises when one of multiple ids is missing', async () => {
+    await expect(Topic.find([1, 999])).rejects.toThrow();
+  });
+
   test.skip('find with string id (TODO: numeric-coercion of string ids)', () => {});
 
   test.skip('find_by_id with hash (TODO: dynamic finder)', () => {});

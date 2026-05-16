@@ -85,17 +85,26 @@ export class LengthValidator<T> implements Validator<T> {
     const o = this.options;
     if (o.in) {
       const [min, max] = o.in;
-      if (len < min) return errors.add(this.attribute, o.tooShort ?? `is too short (minimum is ${min} characters)`, { type: 'length' });
-      if (len > max) return errors.add(this.attribute, o.tooLong ?? `is too long (maximum is ${max} characters)`, { type: 'length' });
+      if (len < min) {
+        errors.add(this.attribute, o.tooShort ?? `is too short (minimum is ${min} characters)`, { type: 'length' });
+        return;
+      }
+      if (len > max) {
+        errors.add(this.attribute, o.tooLong ?? `is too long (maximum is ${max} characters)`, { type: 'length' });
+        return;
+      }
     }
     if (o.is !== undefined && len !== o.is) {
-      return errors.add(this.attribute, o.wrongLength ?? `is the wrong length (should be ${o.is} characters)`, { type: 'length' });
+      errors.add(this.attribute, o.wrongLength ?? `is the wrong length (should be ${o.is} characters)`, { type: 'length' });
+      return;
     }
     if (o.minimum !== undefined && len < o.minimum) {
-      return errors.add(this.attribute, o.tooShort ?? `is too short (minimum is ${o.minimum} characters)`, { type: 'length' });
+      errors.add(this.attribute, o.tooShort ?? `is too short (minimum is ${o.minimum} characters)`, { type: 'length' });
+      return;
     }
     if (o.maximum !== undefined && len > o.maximum) {
-      return errors.add(this.attribute, o.tooLong ?? `is too long (maximum is ${o.maximum} characters)`, { type: 'length' });
+      errors.add(this.attribute, o.tooLong ?? `is too long (maximum is ${o.maximum} characters)`, { type: 'length' });
+      return;
     }
   }
 }
@@ -172,7 +181,8 @@ export class NumericalityValidator<T> implements Validator<T> {
     if (skipForNullable(value, this.options)) return;
     const num = Number(value);
     if (Number.isNaN(num) || !Number.isFinite(num)) {
-      return errors.add(this.attribute, this.options.message ?? 'is not a number', { type: 'numericality' });
+      errors.add(this.attribute, this.options.message ?? 'is not a number', { type: 'numericality' });
+      return;
     }
     const o = this.options;
     if (o.onlyInteger && !Number.isInteger(num)) {

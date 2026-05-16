@@ -59,12 +59,39 @@ describe('Calculations — pluck', () => {
 });
 
 describe('Calculations — aggregates (sum/avg/min/max)', () => {
-  test.skip('sum (TODO: sum aggregate)', () => {});
-  test.skip('sum on a scope (TODO)', () => {});
+  test('sum returns total of column', async () => {
+    expect(await Developer.sum('salary')).toBe(430000);
+  });
+
+  test('sum on a where scope', async () => {
+    expect(await Developer.where({ salary: 100000 }).sum('salary')).toBe(200000);
+  });
+
   test.skip('sum with grouping (TODO: group aggregates)', () => {});
-  test.skip('average (TODO: avg)', () => {});
-  test.skip('minimum (TODO: min)', () => {});
-  test.skip('maximum (TODO: max)', () => {});
+
+  test('average returns mean of column', async () => {
+    expect(await Developer.average('salary')).toBe(107500);
+  });
+
+  test('minimum returns the smallest value', async () => {
+    expect(await Developer.minimum('salary')).toBe(80000);
+  });
+
+  test('maximum returns the largest value', async () => {
+    expect(await Developer.maximum('salary')).toBe(150000);
+  });
+
+  test('average/min/max on empty scope return null', async () => {
+    await fx.reset();
+    expect(await Developer.average('salary')).toBeNull();
+    expect(await Developer.minimum('salary')).toBeNull();
+    expect(await Developer.maximum('salary')).toBeNull();
+  });
+
+  test('sum on empty scope returns 0', async () => {
+    await fx.reset();
+    expect(await Developer.sum('salary')).toBe(0);
+  });
 });
 
 describe('Calculations — grouping', () => {
