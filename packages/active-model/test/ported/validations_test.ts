@@ -77,7 +77,19 @@ describe('Validations', () => {
     expect(t.errors.empty).toBe(true);
   });
 
-  test.skip('validates_each iterates attributes (TODO: validates_each)', () => {});
+  test('validates_each iterates each named attribute', async () => {
+    let hits = 0;
+    Topic.validatesEach(['title', 'content'], (_record, attr, _value, errors) => {
+      errors.add(attr, 'gotcha');
+      hits++;
+    });
+    const t = new Topic({ title: 'valid', content: 'whatever' });
+    expect(await t.isInvalid()).toBe(true);
+    expect(hits).toBe(2);
+    expect(t.errors.on('title')).toEqual(['gotcha']);
+    expect(t.errors.on('content')).toEqual(['gotcha']);
+  });
+
   test.skip('validates_each custom reader (TODO: read_attribute_for_validation)', () => {});
   test('validate { } block — inline block validator', async () => {
     Topic.validate((t, errors) => {

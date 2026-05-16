@@ -119,8 +119,15 @@ describe('Dirty', () => {
     expect(model.savedChanges()['status']).toEqual(['initialized', 'waiting']);
   });
 
-  test.skip('name_previously_changed? predicate (TODO: per-attribute previous_changed?)', () => {});
-  test.skip('name_previously_changed? with from:/to: (TODO)', () => {});
+  test('per-attribute previously_changed predicate', () => {
+    model.name = 'Ringo';
+    model.commitChanges();
+    type Helpers = { namePreviouslyChanged: () => boolean; namePreviousChange: () => [unknown, unknown] | null };
+    expect((model as unknown as Helpers).namePreviouslyChanged()).toBe(true);
+    expect((model as unknown as Helpers).namePreviousChange()).toEqual([null, 'Ringo']);
+  });
+
+  test.skip('per-attribute previously_changed? with from:/to: filter (TODO: filter args)', () => {});
 
   test('previous value is preserved when changed after save', () => {
     expect(model.changes()).toEqual({});
@@ -171,9 +178,25 @@ describe('Dirty', () => {
     expect(model.color).toBe('Red');
   });
 
-  test.skip('restore_attributes can restore only some attributes (TODO: selective restore)', () => {});
+  test('restore_attributes can restore only some attributes', () => {
+    model.name = 'Dmitry';
+    model.color = 'Red';
+    model.commitChanges();
+    model.name = 'Bob';
+    model.color = 'White';
+    model.restoreAttributes(['name']);
+    expect(model.changed().length).toBeGreaterThan(0);
+    expect(model.name).toBe('Dmitry');
+    expect(model.color).toBe('White');
+  });
 
-  test.skip('model can be dup-ed (TODO: dup support)', () => {});
+  test('model can be dup-ed independently of its source', () => {
+    model.name = 'A';
+    const copy = model.dup();
+    copy.name = 'B';
+    expect(model.name).toBe('A');
+    expect(copy.name).toBe('B');
+  });
 
   test('to_json works on model', () => {
     model.name = 'Dmitry';
