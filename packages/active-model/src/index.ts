@@ -13,7 +13,7 @@ export {
   type CallbackFn,
   type CallbackKind,
 } from './Callbacks';
-export { BASE, Errors, type ErrorEntry } from './Errors';
+export { BASE, ErrorObject, Errors, type ErrorEntry } from './Errors';
 export { Model, ValidationError, type TypeRef } from './Model';
 export {
   AcceptanceValidator,

@@ -911,6 +911,49 @@ export class Base extends Model {
     return result.rowsAffected;
   }
 
+  /**
+   * Find each record by id and update it. Two forms:
+   *
+   *   `Model.update(1, { title: 'x' })` — single id + attrs.
+   *   `Model.update([1, 2], [{ title: 'a' }, { title: 'b' }])` — paired arrays.
+   *
+   * Returns the updated record(s). Validations and callbacks fire. To
+   * skip them entirely, use `Model.updateAll`.
+   */
+  static async update<This extends typeof Base>(
+    this: This,
+    id: unknown,
+    attributes: Record<string, unknown>,
+  ): Promise<InstanceType<This>>;
+  static async update<This extends typeof Base>(
+    this: This,
+    ids: readonly unknown[],
+    attributes: readonly Record<string, unknown>[],
+  ): Promise<InstanceType<This>[]>;
+  static async update<This extends typeof Base>(
+    this: This,
+    idOrIds: unknown | readonly unknown[],
+    attrsOrList: Record<string, unknown> | readonly Record<string, unknown>[],
+  ): Promise<InstanceType<This> | InstanceType<This>[]> {
+    if (Array.isArray(idOrIds)) {
+      const list = idOrIds as readonly unknown[];
+      const attrsList = attrsOrList as readonly Record<string, unknown>[];
+      if (list.length !== attrsList.length) {
+        throw new Error('Model.update: ids and attributes arrays must have the same length');
+      }
+      const records: InstanceType<This>[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const record = await (this as unknown as typeof Base).find(list[i]) as InstanceType<This>;
+        await record.update(attrsList[i] as Record<string, unknown>);
+        records.push(record);
+      }
+      return records;
+    }
+    const record = await (this as unknown as typeof Base).find(idOrIds) as InstanceType<This>;
+    await record.update(attrsOrList as Record<string, unknown>);
+    return record;
+  }
+
   /** Bulk update via UPDATE statement. */
   static async updateAll<This extends typeof Base>(
     this: This,
@@ -1110,6 +1153,19 @@ export class Base extends Model {
     // biome-ignore lint/suspicious/noExplicitAny: protected field rehydration
     (this as any)._attributes.hydrate(row.attributes());
     return this;
+  }
+
+  /**
+   * Like `Model#dup` but clears the primary key so the duplicate
+   * looks like a fresh, unsaved record — matches Rails' behavior:
+   * `record.dup.save!` inserts a new row.
+   */
+  override dup(): this {
+    const copy = super.dup();
+    copy.writeAttribute((this.constructor as typeof Base).primaryKey, null);
+    // biome-ignore lint/suspicious/noExplicitAny: protected fields
+    (copy as any)._persisted = false;
+    return copy;
   }
 
   /**

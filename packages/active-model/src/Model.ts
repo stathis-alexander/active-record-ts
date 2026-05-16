@@ -87,26 +87,34 @@ const camelizeSuffix = (name: string): string =>
 
 /**
  * Install per-attribute dirty helpers on the prototype: `nameChanged()`,
- * `nameWas()`, `nameChange()`, `restoreName()`. Mirrors a slice of
- * `ActiveModel::Dirty`'s generated methods.
+ * `nameWas()`, `nameChange()`, `restoreName()`, `namePreviouslyChanged()`,
+ * `namePreviousChange()`. Mirrors a slice of `ActiveModel::Dirty`'s
+ * generated methods.
  */
 const definePerAttributeDirty = (target: typeof Model, names: string[]): void => {
   for (const name of names) {
     const suffix = camelizeSuffix(name);
+    const camelName = lowerFirst(suffix);
     const helpers: Record<string, (this: Model, ...args: unknown[]) => unknown> = {
-      [`${lowerFirst(suffix)}Changed`](this: Model) {
+      [`${camelName}Changed`](this: Model) {
         return this.attributeChanged(name);
       },
-      [`${lowerFirst(suffix)}Was`](this: Model) {
+      [`${camelName}Was`](this: Model) {
         return this.attributeWas(name);
       },
-      [`${lowerFirst(suffix)}Change`](this: Model): [unknown, unknown] | null {
+      [`${camelName}Change`](this: Model): [unknown, unknown] | null {
         if (!this.attributeChanged(name)) return null;
         return [this.attributeWas(name), this.readAttribute(name)];
       },
       [`restore${suffix}`](this: Model) {
-        // Reset just this one attribute to its original value.
         this.writeAttribute(name, this.attributeWas(name));
+      },
+      [`${camelName}PreviouslyChanged`](this: Model): boolean {
+        return Object.prototype.hasOwnProperty.call(this.savedChanges(), name);
+      },
+      [`${camelName}PreviousChange`](this: Model): [unknown, unknown] | null {
+        const saved = this.savedChanges();
+        return Object.prototype.hasOwnProperty.call(saved, name) ? saved[name]! : null;
       },
     };
     for (const [methodName, fn] of Object.entries(helpers)) {
@@ -196,8 +204,16 @@ export class Model {
   savedChanges(): Record<string, [unknown, unknown]> {
     return this._attributes.savedChanges();
   }
-  restoreAttributes(): void {
-    this._attributes.restore();
+  /**
+   * Revert pending changes. With no argument restores every changed
+   * attribute; with `names` restores only the listed ones. Mirrors
+   * Rails' `restore_attributes(['name'])`.
+   */
+  restoreAttributes(names?: string[]): void {
+    if (!names) return this._attributes.restore();
+    for (const name of names) {
+      this._attributes.write(name, this._attributes.was(name));
+    }
   }
   /** Reset both pending and last-saved changes — Rails' `clear_changes_information`. */
   clearChangesInformation(): void {
@@ -232,6 +248,20 @@ export class Model {
 
   toJSON(): Record<string, unknown> {
     return this.attributes();
+  }
+
+  /**
+   * Return a new instance of the same class with the same attribute
+   * values. Mirrors Rails' `record.dup`. The AR layer overrides this
+   * to also clear the primary key so the duplicate looks like a fresh
+   * (unsaved) record.
+   */
+  dup(): this {
+    const ctor = this.constructor as new () => this;
+    const copy = new ctor();
+    // biome-ignore lint/suspicious/noExplicitAny: protected hydrate
+    (copy as any)._attributes.hydrate(this.attributes());
+    return copy;
   }
 
   // ──────────────────────────── class-side configuration ────────────────────────────
@@ -289,6 +319,28 @@ export class Model {
   static clearValidators<This extends typeof Model>(this: This): This {
     getRegistry(this).validators.length = 0;
     return this;
+  }
+
+  /**
+   * Run a function once per attribute, accumulating errors. Mirrors Rails'
+   * `validates_each :a, :b do |record, attr, value| ... end`.
+   *
+   *   Klass.validatesEach(['a', 'b'], (record, attr, value, errors) => {
+   *     if (!ok(value)) errors.add(attr, 'bad');
+   *   });
+   */
+  static validatesEach<This extends typeof Model>(
+    this: This,
+    attributes: readonly string[],
+    fn: (record: InstanceType<This>, attribute: string, value: unknown, errors: Errors) => void | Promise<void>,
+    options: ValidatorOptions<InstanceType<This>> = {},
+  ): This {
+    return this.validate(async (record, errors) => {
+      for (const attr of attributes) {
+        const value = (record as unknown as Record<string, unknown>)[attr];
+        await fn(record, attr, value, errors);
+      }
+    }, options);
   }
 
   /** Add a presence validator. */

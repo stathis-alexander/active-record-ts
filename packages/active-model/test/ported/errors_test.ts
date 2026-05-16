@@ -48,7 +48,22 @@ describe('Errors', () => {
     expect(errors.any).toBe(true);
   });
 
-  test.skip('first — returns an Error object (TODO: Error wrapper class)', () => {});
+  test('first — returns an ErrorObject', async () => {
+    const { ErrorObject } = await import('../../src');
+    const errors = new Errors();
+    errors.add('name', 'blank');
+    expect(errors.first).toBeInstanceOf(ErrorObject);
+    expect(errors.first?.attribute).toBe('name');
+  });
+
+  test('objects — exposes rich ErrorObject entries', async () => {
+    const { ErrorObject } = await import('../../src');
+    const errors = new Errors();
+    errors.add('name', 'is invalid');
+    errors.add('email', 'is invalid');
+    for (const e of errors.objects) expect(e).toBeInstanceOf(ErrorObject);
+    expect(errors.objects[0]?.fullMessage()).toBe('Name is invalid');
+  });
 
   test('dup — duplicates errors independently', () => {
     const errors = new Errors();

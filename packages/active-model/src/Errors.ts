@@ -23,6 +23,23 @@ export type ErrorEntry = {
   options?: Record<string, unknown>;
 };
 
+/**
+ * Rich error object exposed by `errors.objects` / `errors.first` / iteration.
+ * Mirrors a subset of Rails' `ActiveModel::Error` — enough for callers
+ * who want to introspect (attribute / type / options / full message) rather
+ * than work with bare strings.
+ */
+export class ErrorObject {
+  constructor(private readonly entry: ErrorEntry) {}
+  get attribute(): string { return this.entry.attribute; }
+  get message(): string { return this.entry.message; }
+  get type(): string | undefined { return this.entry.type; }
+  get options(): Record<string, unknown> | undefined { return this.entry.options; }
+  fullMessage(): string {
+    return this.entry.attribute === BASE ? this.entry.message : `${humanize(this.entry.attribute)} ${this.entry.message}`;
+  }
+}
+
 /** Special attribute name for errors that aren't tied to a specific column. */
 export const BASE = 'base';
 
@@ -218,6 +235,16 @@ export class Errors {
     const copy = new Errors();
     copy.merge(this);
     return copy;
+  }
+
+  /** Rich `ErrorObject` instances for each entry, in insertion order. */
+  get objects(): ErrorObject[] {
+    return this.entries.map((e) => new ErrorObject(e));
+  }
+
+  /** First error (rich object) or `null`. */
+  get first(): ErrorObject | null {
+    return this.entries[0] ? new ErrorObject(this.entries[0]) : null;
   }
 
   get count(): number {
