@@ -5,7 +5,6 @@ const SQLITE: ConnectionConfig = { adapter: 'sqlite', database: ':memory:' };
 
 class User extends Base {
   static override tableName = 'users';
-  declare id: number;
   declare name: string;
   declare email: string;
   declare age: number;

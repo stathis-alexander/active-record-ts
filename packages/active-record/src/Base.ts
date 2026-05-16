@@ -185,72 +185,94 @@ export class Base extends Model {
 
   // ──────────────────────────── query API ────────────────────────────
 
-  static all<T extends Base>(this: BaseConstructor<T>): Relation<T> {
-    return new Relation<T>(this);
+  static all<This extends typeof Base>(this: This): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>);
   }
 
-  static where<T extends Base>(this: BaseConstructor<T>, input: WhereInput<T>): Relation<T> {
-    return new Relation<T>(this).where(input);
+  static where<This extends typeof Base>(
+    this: This,
+    input: WhereInput<InstanceType<This>>,
+  ): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).where(input);
   }
 
-  static order<T extends Base>(this: BaseConstructor<T>, ...orders: Parameters<Relation<T>['order']>): Relation<T> {
-    return new Relation<T>(this).order(...orders);
+  static order<This extends typeof Base>(
+    this: This,
+    ...orders: Parameters<Relation<InstanceType<This>>['order']>
+  ): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).order(...orders);
   }
 
-  static limit<T extends Base>(this: BaseConstructor<T>, n: number): Relation<T> {
-    return new Relation<T>(this).limit(n);
+  static limit<This extends typeof Base>(this: This, n: number): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).limit(n);
   }
 
-  static offset<T extends Base>(this: BaseConstructor<T>, n: number): Relation<T> {
-    return new Relation<T>(this).offset(n);
+  static offset<This extends typeof Base>(this: This, n: number): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).offset(n);
   }
 
-  static select<T extends Base>(this: BaseConstructor<T>, ...projections: Parameters<Relation<T>['select']>): Relation<T> {
-    return new Relation<T>(this).select(...projections);
+  static select<This extends typeof Base>(
+    this: This,
+    ...projections: Parameters<Relation<InstanceType<This>>['select']>
+  ): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).select(...projections);
   }
 
-  static distinct<T extends Base>(this: BaseConstructor<T>, value = true): Relation<T> {
-    return new Relation<T>(this).distinct(value);
+  static distinct<This extends typeof Base>(this: This, value = true): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).distinct(value);
   }
 
-  static none<T extends Base>(this: BaseConstructor<T>): Relation<T> {
-    return new Relation<T>(this).none();
+  static none<This extends typeof Base>(this: This): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).none();
   }
 
-  static async find<T extends Base>(this: BaseConstructor<T>, id: unknown): Promise<T> {
-    return new Relation<T>(this).find(id);
+  static async find<This extends typeof Base>(this: This, id: unknown): Promise<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).find(id);
   }
 
-  static async findBy<T extends Base>(this: BaseConstructor<T>, input: WhereInput<T>): Promise<T | null> {
-    return new Relation<T>(this).findBy(input);
+  static async findBy<This extends typeof Base>(
+    this: This,
+    input: WhereInput<InstanceType<This>>,
+  ): Promise<InstanceType<This> | null> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).findBy(input);
   }
 
-  static async first<T extends Base>(this: BaseConstructor<T>): Promise<T | null> {
-    return (await new Relation<T>(this).first()) as T | null;
+  static async first<This extends typeof Base>(this: This): Promise<InstanceType<This> | null> {
+    return (await new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).first()) as
+      | InstanceType<This>
+      | null;
   }
 
-  static async last<T extends Base>(this: BaseConstructor<T>): Promise<T | null> {
-    return (await new Relation<T>(this).last()) as T | null;
+  static async last<This extends typeof Base>(this: This): Promise<InstanceType<This> | null> {
+    return (await new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).last()) as
+      | InstanceType<This>
+      | null;
   }
 
-  static async take<T extends Base>(this: BaseConstructor<T>, n?: number): Promise<T | T[] | null> {
-    return new Relation<T>(this).take(n);
+  static async take<This extends typeof Base>(
+    this: This,
+    n?: number,
+  ): Promise<InstanceType<This> | InstanceType<This>[] | null> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).take(n);
   }
 
   static async count(column?: string): Promise<number> {
     return new Relation(this as unknown as BaseConstructor<Base>).count(column);
   }
 
-  static async exists<T extends Base>(this: BaseConstructor<T>, input?: WhereInput<T>): Promise<boolean> {
-    return new Relation<T>(this).exists(input);
+  static async exists<This extends typeof Base>(
+    this: This,
+    input?: WhereInput<InstanceType<This>>,
+  ): Promise<boolean> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).exists(input);
   }
 
-  static async pluck<T extends Base, R = unknown>(this: BaseConstructor<T>, ...columns: string[]): Promise<R[]> {
-    return new Relation<T>(this).pluck<R>(...columns);
+  static async pluck<R = unknown>(this: typeof Base, ...columns: string[]): Promise<R[]> {
+    return new Relation(this as unknown as BaseConstructor<Base>).pluck<R>(...columns);
   }
 
-  static async ids<T extends Base>(this: BaseConstructor<T>): Promise<unknown[]> {
-    return new Relation<T>(this).ids();
+  static async ids(this: typeof Base): Promise<unknown[]> {
+    return new Relation(this as unknown as BaseConstructor<Base>).ids();
   }
 
   // ──────────────────────────── class-level persistence ────────────────────────────
@@ -275,20 +297,25 @@ export class Base extends Model {
   }
 
   /** Bulk delete via a single DELETE statement. Returns rows affected. */
-  static async deleteAll<T extends Base>(this: BaseConstructor<T>, input?: WhereInput<T>): Promise<number> {
+  static async deleteAll<This extends typeof Base>(
+    this: This,
+    input?: WhereInput<InstanceType<This>>,
+  ): Promise<number> {
     const table = this.arelTable();
     const dm = new Arel.DeleteManager(table);
-    if (input !== undefined) dm.where(buildPredicate(this, input, false));
+    if (input !== undefined) {
+      dm.where(buildPredicate(this as unknown as BaseConstructor<InstanceType<This>>, input, false));
+    }
     const [sql, binds] = this.connection().toSql(dm);
     const result = await this.connection().exec(sql, binds);
     return result.rowsAffected;
   }
 
   /** Bulk update via UPDATE statement. */
-  static async updateAll<T extends Base>(
-    this: BaseConstructor<T>,
+  static async updateAll<This extends typeof Base>(
+    this: This,
     values: Record<string, unknown>,
-    input?: WhereInput<T>,
+    input?: WhereInput<InstanceType<This>>,
   ): Promise<number> {
     const table = this.arelTable();
     const um = new Arel.UpdateManager(table);
@@ -297,15 +324,21 @@ export class Base extends Model {
       pairs[name] = new ArelNodes.BindParam(value as never);
     }
     um.set(pairs as never);
-    if (input !== undefined) um.where(buildPredicate(this, input, false));
+    if (input !== undefined) {
+      um.where(buildPredicate(this as unknown as BaseConstructor<InstanceType<This>>, input, false));
+    }
     const [sql, binds] = this.connection().toSql(um);
     const result = await this.connection().exec(sql, binds);
     return result.rowsAffected;
   }
 
   /** Per-record destroy in a transaction. */
-  static async destroyAll<T extends Base>(this: BaseConstructor<T>, input?: WhereInput<T>): Promise<T[]> {
-    const scope = input === undefined ? new Relation<T>(this) : new Relation<T>(this).where(input);
+  static async destroyAll<This extends typeof Base>(
+    this: This,
+    input?: WhereInput<InstanceType<This>>,
+  ): Promise<InstanceType<This>[]> {
+    const ctor = this as unknown as BaseConstructor<InstanceType<This>>;
+    const scope = input === undefined ? new Relation<InstanceType<This>>(ctor) : new Relation<InstanceType<This>>(ctor).where(input);
     const records = await scope.toArray();
     for (const r of records) await r.destroy();
     return records;

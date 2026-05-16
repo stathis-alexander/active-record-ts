@@ -13,3 +13,16 @@ export {
 } from './adapters';
 export type { AdapterName, ColumnInfo, ConnectionConfig, ExecResult, Row } from './types';
 export { getConnection, setConnection, clearConnection } from './connection';
+export { Migration, type MigrationConstructor } from './Migration';
+export { Migrator } from './Migrator';
+export { SchemaStatements } from './schema/SchemaStatements';
+export { createTableBuilder } from './schema/TableBuilder';
+export type {
+  ColumnDefinition,
+  ColumnOptions,
+  ColumnType,
+  CreateTableOptions,
+  ForeignKeyOptions,
+  IndexOptions,
+  TableBuilder,
+} from './schema/types';
