@@ -113,7 +113,19 @@ describe('Calculations — grouping', () => {
     expect(result.get(100000)).toBe(100000);
   });
 
-  test.skip('group on multiple columns (TODO: composite group key shape)', () => {});
+  test('group on multiple columns — key is an array of group values', async () => {
+    await Developer.create({ name: 'Z', salary: 100000 });
+    const result = await Developer.all().group('salary', 'name').count() as Map<unknown, number>;
+    // Find an entry with the [100000, 'Z'] composite key.
+    let found = false;
+    for (const [key, count] of result) {
+      if (Array.isArray(key) && key[0] === 100000 && key[1] === 'Z' && count === 1) {
+        found = true;
+        break;
+      }
+    }
+    expect(found).toBe(true);
+  });
 
   test.skip('count_with_distinct (TODO: count + distinct interaction)', () => {});
 });

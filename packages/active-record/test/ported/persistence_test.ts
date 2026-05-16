@@ -183,11 +183,61 @@ describe('Persistence — create / save / update / destroy', () => {
 
   test.skip('increment with :touch updates timestamps (TODO: increment+touch)', () => {});
 
-  test.skip('becomes converts STI subclass (TODO: STI)', () => {});
-  test.skip('becomes after reload_schema_from_cache (TODO)', () => {});
-  test.skip('becomes preserves errors / status (TODO)', () => {});
-  test.skip('dup becomes persists changes (TODO)', () => {});
-  test.skip('becomes_initializes_missing_attributes (TODO)', () => {});
+  test('becomes converts to another subclass preserving attributes + status', async () => {
+    class Employee extends Topic {}
+    class Manager extends Employee {}
+    Employee.useConnection(fx.adapter);
+    Manager.useConnection(fx.adapter);
+    await Employee.loadSchema();
+    await Manager.loadSchema();
+    const e = await Employee.create({ title: 'alice' });
+    const m = e.becomes(Manager);
+    expect(m).toBeInstanceOf(Manager);
+    expect(m.readAttribute('title')).toBe('alice');
+    expect(m.persisted).toBe(true);
+  });
+
+  test('becomes preserves errors', async () => {
+    class A extends Topic {}
+    class B extends Topic {}
+    A.useConnection(fx.adapter);
+    B.useConnection(fx.adapter);
+    await A.loadSchema();
+    await B.loadSchema();
+    const a = new A({ title: 'x' });
+    a.errors.add('title', 'is bad');
+    const b = a.becomes(B);
+    expect(b.errors.on('title')).toEqual(['is bad']);
+  });
+
+  test('STI: instantiate dispatches to registered subclass via inheritance column', async () => {
+    class Article extends Topic {}
+    class Newsflash extends Article {}
+    Article.useConnection(fx.adapter);
+    Newsflash.useConnection(fx.adapter);
+    Newsflash.stiAs('Newsflash');
+    await Article.loadSchema();
+    await Newsflash.loadSchema();
+    await Newsflash.create({ title: 'breaking', type: 'Newsflash' });
+    // Querying via the parent should hydrate as the registered subclass.
+    const rows = await Article.where({ type: 'Newsflash' });
+    expect(rows[0]).toBeInstanceOf(Newsflash);
+  });
+
+  test('STI: subclass autostamps inheritance column on insert', async () => {
+    class A2 extends Topic {}
+    class Specialist extends A2 {}
+    A2.useConnection(fx.adapter);
+    Specialist.useConnection(fx.adapter);
+    Specialist.stiAs('Specialist');
+    await A2.loadSchema();
+    await Specialist.loadSchema();
+    const s = await Specialist.create({ title: 'auto-typed' });
+    expect(s.readAttribute('type')).toBe('Specialist');
+  });
+
+  test.skip('dup becomes persists changes (TODO: dup support)', () => {});
+  test.skip('becomes_initializes_missing_attributes (TODO: missing attrs)', () => {});
 });
 
 describe('Persistence — reload + touch', () => {

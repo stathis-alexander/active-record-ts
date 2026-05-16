@@ -210,6 +210,16 @@ export class Errors {
     return this.merge(other);
   }
 
+  /**
+   * Return a new `Errors` collection with the same entries. Subsequent
+   * modifications on either side don't affect the other.
+   */
+  dup(): Errors {
+    const copy = new Errors();
+    copy.merge(this);
+    return copy;
+  }
+
   get count(): number {
     return this.entries.length;
   }

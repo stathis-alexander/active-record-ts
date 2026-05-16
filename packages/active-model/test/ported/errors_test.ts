@@ -50,7 +50,14 @@ describe('Errors', () => {
 
   test.skip('first — returns an Error object (TODO: Error wrapper class)', () => {});
 
-  test.skip('dup — duplicates errors independently (TODO: dup)', () => {});
+  test('dup — duplicates errors independently', () => {
+    const errors = new Errors();
+    errors.add('name', 'is invalid');
+    const dup = errors.dup();
+    dup.add('email', 'is invalid');
+    expect(errors.attributeNames).toEqual(['name']);
+    expect(dup.attributeNames).toEqual(['name', 'email']);
+  });
 
   test('has_key? — `errors.includes(attr)`', () => {
     const errors = new Errors();

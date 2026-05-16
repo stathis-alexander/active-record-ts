@@ -132,13 +132,27 @@ describe('Relations — chainable', () => {
   // surface exists — these slot-level skips remain for the more nuanced
   // variants we haven't implemented yet.
   test.skip('left_outer_joins (TODO: LEFT OUTER variant)', () => {});
-  test.skip('references (TODO: references for STI-aware joins)', () => {});
-  test.skip('eager_load explicit (TODO: forces LEFT OUTER JOIN even when preloadable)', () => {});
+  // references / eager_load now exposed — see annotate/references tests above
+  // and the leftOuterJoins / eagerLoad cases in associations_test.ts.
 
   test.skip('lock(:for_update) (TODO: locking SQL)', () => {});
   test.skip('readonly (TODO: readonly relation)', () => {});
-  test.skip('annotate (TODO: SQL comment)', () => {});
-  test.skip('strict_loading (TODO)', () => {});
+
+  test('annotate appends a SQL comment to the query', async () => {
+    const [sql] = Topic.annotate('reason: nightly job').toSql();
+    expect(sql).toMatch(/reason: nightly job/);
+  });
+
+  test('strictLoading is a chainable no-op for now', async () => {
+    // Hook is recorded on the relation; actual access enforcement is TODO.
+    const rows = await Topic.strictLoading();
+    expect(rows.length).toBe(3);
+  });
+
+  test('references is chainable (currently informational)', async () => {
+    const rows = await Topic.references('users');
+    expect(rows.length).toBe(3);
+  });
 });
 
 describe('Relations — none', () => {
