@@ -513,8 +513,15 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return rows.length > 0;
   }
 
-  async count(column?: string): Promise<number | Map<unknown, number>> {
-    return (await this.aggregate('COUNT', column ?? '*')) as number | Map<unknown, number>;
+  async count(columnOrOptions?: string | { distinct: boolean; column?: string }): Promise<number | Map<unknown, number>> {
+    // count('email') | count() | count({ distinct: true }) | count({ distinct: true, column: 'email' })
+    if (typeof columnOrOptions === 'object' && columnOrOptions !== null) {
+      const expr = columnOrOptions.distinct
+        ? `DISTINCT ${columnOrOptions.column ?? '*'}`
+        : (columnOrOptions.column ?? '*');
+      return (await this.aggregate('COUNT', expr)) as number | Map<unknown, number>;
+    }
+    return (await this.aggregate('COUNT', columnOrOptions ?? '*')) as number | Map<unknown, number>;
   }
 
   async sum(column: string): Promise<number | Map<unknown, number>> {

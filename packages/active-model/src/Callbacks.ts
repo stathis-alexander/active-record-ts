@@ -42,6 +42,18 @@ export class HaltError extends Error {
   }
 }
 
+/**
+ * Symbol-shaped sentinel callers can throw to halt the chain — mirrors
+ * Rails' `throw :abort` semantics. The chain swallows it and treats it
+ * as a `false` return from a `before_*` callback.
+ */
+export const ABORT_SENTINEL = Symbol.for('@arelts/active-model:abort');
+
+/** Convenience helper for chain implementations: convert "throw :abort" to a clean halt. */
+export const throwAbort = (): never => {
+  throw ABORT_SENTINEL;
+};
+
 export class CallbackChain<T> {
   private readonly chains: Record<CallbackEvent, CallbackEntry<T>[]> = {
     validation: [],
@@ -88,6 +100,7 @@ export class CallbackChain<T> {
         if (result === false) return false;
       } catch (err) {
         if (err instanceof HaltError) return false;
+        if (err === ABORT_SENTINEL) return false;
         throw err;
       }
     }
@@ -109,6 +122,7 @@ export class CallbackChain<T> {
         await (entry.fn as CallbackFn<T>)(record);
       } catch (err) {
         if (err instanceof HaltError) break;
+        if (err === ABORT_SENTINEL) break;
         throw err;
       }
     }

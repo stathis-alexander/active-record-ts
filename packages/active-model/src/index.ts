@@ -4,8 +4,10 @@ export {
   type AttributeDefinition,
 } from './AttributeSet';
 export {
+  ABORT_SENTINEL,
   CallbackChain,
   HaltError,
+  throwAbort,
   type AroundCallbackFn,
   type CallbackEvent,
   type CallbackFn,

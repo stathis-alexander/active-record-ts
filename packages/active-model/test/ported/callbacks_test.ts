@@ -86,7 +86,24 @@ describe('Callbacks', () => {
     expect(m.callbacks).toEqual(['before_create']);
   });
 
-  test.skip('halt via throw :abort (TODO: throw-based halt — we use return false)', () => {});
+  test('halt via throwAbort() (mirrors Rails throw :abort)', async () => {
+    const { throwAbort } = await import('../../src');
+    class HaltsViaAbort extends Model {
+      callbacks: string[] = [];
+      async run(): Promise<void> {
+        const ctor = this.constructor as typeof Model;
+        await ctor.runCallbacks('create', this, async () => { this.callbacks.push('create'); });
+      }
+    }
+    HaltsViaAbort.beforeCreate((m: HaltsViaAbort) => {
+      m.callbacks.push('before_create');
+      throwAbort();
+    });
+    HaltsViaAbort.afterCreate((m: HaltsViaAbort) => { m.callbacks.push('after_create'); });
+    const m = new HaltsViaAbort();
+    await m.run();
+    expect(m.callbacks).toEqual(['before_create']);
+  });
 
   test.skip('after callbacks skipped when block returns false (TODO: body-result propagation)', () => {});
 

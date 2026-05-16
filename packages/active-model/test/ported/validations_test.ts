@@ -138,9 +138,33 @@ describe('Validations', () => {
     expect(await t.isInvalid()).toBe(false);
   });
 
-  test.skip('validation with message as Proc (TODO: Proc message)', () => {});
-  test.skip('validation message Proc receives record (TODO)', () => {});
-  test.skip('validation message Proc receives record + data (TODO)', () => {});
+  test('validation with message as Proc evaluates at error-add time', async () => {
+    Topic.validatesPresenceOf('title', { message: () => 'NO BLANKS HERE' });
+    const t = new Topic();
+    expect(await t.isValid()).toBe(false);
+    expect(t.errors.on('title')).toEqual(['NO BLANKS HERE']);
+  });
+
+  test('validation message Proc receives the record', async () => {
+    Topic.validatesPresenceOf('title', {
+      message: (record) => `You have failed me for the last time, ${(record as Topic).authorName ?? 'Admiral'}.`,
+    });
+    const t = new Topic({ authorName: 'Admiral' });
+    await t.validate();
+    expect(t.errors.on('title')).toEqual(['You have failed me for the last time, Admiral.']);
+  });
+
+  test('validation message Proc receives record + data { attribute, value, type }', async () => {
+    Topic.validatesPresenceOf('title', {
+      message: (record, data) =>
+        `${data.attribute} is missing. You have failed me for the last time, ${(record as Topic).authorName ?? 'Admiral'}.`,
+    });
+    const t = new Topic({ authorName: 'Admiral' });
+    await t.validate();
+    expect(t.errors.on('title')).toEqual([
+      'title is missing. You have failed me for the last time, Admiral.',
+    ]);
+  });
 
   test('list of validators for model', () => {
     Topic.validatesPresenceOf('title');
@@ -264,6 +288,12 @@ describe('Validations', () => {
 
   test.skip('frozen models can be validated (TODO: frozen support)', () => {});
 
-  test.skip('except_on (TODO: contexts)', () => {});
-  test.skip('validations some with except (TODO: contexts)', () => {});
+  test('exceptOn skips the validator for matching contexts', async () => {
+    Topic.validatesPresenceOf('title', { exceptOn: 'custom_context' });
+    const t = new Topic();
+    expect(await t.isValid('create')).toBe(false);
+    expect(await t.isValid('custom_context')).toBe(true);
+  });
+
+  test.skip('validations some with except (TODO: per-rule exceptOn)', () => {});
 });
