@@ -111,8 +111,20 @@ const camelizeMethodSuffix = (name: string): string =>
  * Install dynamic finder methods on the model constructor:
  * `User.findByName(value)` resolves to `User.findBy({ name: value })`, and
  * `findByNameOrThrow(value)` throws `RecordNotFound` when nothing matches.
+ *
+ * Multi-attribute finders (`findByNameAndEmail('Alex', 'a@b.c')`) are
+ * resolved on demand via a generic intercept stored in a class-side
+ * map of `attributeName → original` snake-case form.
  */
+const DYNAMIC_FINDER_NAMES = Symbol.for('@arelts/active-record:dynamicFinderAttrs');
+
 const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
+  // Track all known attribute names for use by multi-attribute lookups.
+  // biome-ignore lint/suspicious/noExplicitAny: attached to constructor
+  const c = ctor as any;
+  if (!c[DYNAMIC_FINDER_NAMES]) c[DYNAMIC_FINDER_NAMES] = new Set<string>();
+  (c[DYNAMIC_FINDER_NAMES] as Set<string>).add(attribute);
+
   const suffix = camelizeMethodSuffix(attribute);
   const findName = `findBy${suffix}`;
   const findNameOrThrow = `${findName}OrThrow`;
@@ -138,6 +150,68 @@ const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
       },
     });
   }
+};
+
+/**
+ * Resolve a multi-attribute dynamic finder name (e.g. `findByNameAndEmail`)
+ * into a Record<string, unknown> from its argument list, or return null
+ * if the method name doesn't decompose to known attribute names.
+ *
+ * Mirrors Rails' `find_by_<a>_and_<b>` matcher.
+ */
+const tryResolveMultiFinder = (ctor: typeof Base, methodName: string, args: unknown[]): null | { conditions: Record<string, unknown>; orThrow: boolean } => {
+  let m = methodName;
+  const orThrow = m.endsWith('OrThrow');
+  if (orThrow) m = m.slice(0, -'OrThrow'.length);
+  if (!m.startsWith('findBy')) return null;
+  m = m.slice('findBy'.length);
+  if (m.length === 0) return null;
+  // biome-ignore lint/suspicious/noExplicitAny: known set lookup
+  const attrs = (ctor as any)[DYNAMIC_FINDER_NAMES] as Set<string> | undefined;
+  if (!attrs) return null;
+  const parts = m.split('And');
+  if (parts.length !== args.length) return null;
+  const conditions: Record<string, unknown> = {};
+  for (let i = 0; i < parts.length; i++) {
+    const camelToAttr = (camel: string): string | null => {
+      const lowered = camel.charAt(0).toLowerCase() + camel.slice(1);
+      if (attrs.has(lowered)) return lowered;
+      // try snake_case form: HomeAddress -> home_address
+      const snake = camel.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+      return attrs.has(snake) ? snake : null;
+    };
+    const attr = camelToAttr(parts[i]!);
+    if (!attr) return null;
+    conditions[attr] = args[i];
+  }
+  return { conditions, orThrow };
+};
+
+/** Install a Proxy on `ctor` so unknown `findBy<X>And<Y>` calls resolve at access time. */
+const installDynamicFinderProxy = (ctor: typeof Base): void => {
+  // Avoid wrapping twice.
+  // biome-ignore lint/suspicious/noExplicitAny: marker for installation
+  if ((ctor as any).__arDynamicProxyInstalled) return;
+  // biome-ignore lint/suspicious/noExplicitAny: marker
+  (ctor as any).__arDynamicProxyInstalled = true;
+  // We can't wrap the constructor object in a Proxy after the class has
+  // been defined (would break instanceof / prototype identity), so install
+  // a fallback per-call helper instead. Callers use it explicitly via
+  // `Base.findByDynamic('findByNameAndEmail', 'a', 'b')`.
+  Object.defineProperty(ctor, 'findByDynamic', {
+    configurable: true,
+    writable: true,
+    async value(this: typeof Base, methodName: string, ...args: unknown[]) {
+      const resolved = tryResolveMultiFinder(this, methodName, args);
+      if (!resolved) throw new Error(`Couldn't resolve dynamic finder "${methodName}" — args/attributes don't line up`);
+      const record = await this.findBy(resolved.conditions as never);
+      if (record) return record;
+      if (resolved.orThrow) {
+        throw new RecordNotFound(`Couldn't find ${this.name} with ${JSON.stringify(resolved.conditions)}`);
+      }
+      return null;
+    },
+  });
 };
 
 /**
@@ -537,6 +611,7 @@ export class Base extends Model {
   ): This {
     const result = (Model.attribute as (this: This, name: string, type: TypeRef, options?: { default?: unknown }) => This).call(this, name, type, options);
     defineDynamicFinders(this as unknown as typeof Base, name);
+    installDynamicFinderProxy(this as unknown as typeof Base);
     return result;
   }
 
@@ -555,6 +630,7 @@ export class Base extends Model {
       this.attribute(col.name, type, { default: defaultValue });
     }
     defineDynamicFinders(this, col.name);
+    installDynamicFinderProxy(this);
   }
 
   /** Instantiate a record from a database row, skipping dirty tracking. */
@@ -654,6 +730,33 @@ export class Base extends Model {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).strictLoading(value);
   }
 
+  /**
+   * Register a named scope: a function that takes any args and returns a
+   * Relation. The scope name becomes a static method on the class.
+   *
+   *   User.scope('adults', () => User.where(['age >= ?', 18]));
+   *   await User.adults();
+   *
+   * Scopes can take arguments:
+   *
+   *   User.scope('byCity', (city: string) => User.where({ city }));
+   *   await User.byCity('Portland');
+   */
+  static scope<This extends typeof Base, A extends unknown[]>(
+    this: This,
+    name: string,
+    body: (this: This, ...args: A) => Relation<InstanceType<This>>,
+  ): This {
+    Object.defineProperty(this, name, {
+      configurable: true,
+      writable: true,
+      value(this: This, ...args: A): Relation<InstanceType<This>> {
+        return body.apply(this, args);
+      },
+    });
+    return this;
+  }
+
   static async find<This extends typeof Base>(this: This, ids: readonly unknown[]): Promise<InstanceType<This>[]>;
   static async find<This extends typeof Base>(this: This, id: unknown): Promise<InstanceType<This>>;
   static async find<This extends typeof Base>(this: This, ...ids: unknown[]): Promise<InstanceType<This>[]>;
@@ -689,8 +792,8 @@ export class Base extends Model {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).take(n);
   }
 
-  static async count(column?: string): Promise<number> {
-    const result = await new Relation(this as unknown as BaseConstructor<Base>).count(column);
+  static async count(columnOrOptions?: string | { distinct: boolean; column?: string }): Promise<number> {
+    const result = await new Relation(this as unknown as BaseConstructor<Base>).count(columnOrOptions);
     return result as number;
   }
 

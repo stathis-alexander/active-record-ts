@@ -124,9 +124,27 @@ describe('Relations — chainable', () => {
   });
 
   test.skip('only/except (TODO: filter relation values)', () => {});
+
+  test('scope: named scope registers as a static method', async () => {
+    class Scoped extends Topic {}
+    Scoped.useConnection(fx.adapter);
+    await Scoped.loadSchema();
+    Scoped.scope('byAuthor', (name: string) => Scoped.where({ author_name: name }));
+    const rows = await (Scoped as unknown as { byAuthor: (n: string) => Promise<Scoped[]> }).byAuthor('one');
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.readAttribute('title')).toBe('A');
+  });
+
+  test('scope returns a Relation and is chainable', async () => {
+    class Scoped2 extends Topic {}
+    Scoped2.useConnection(fx.adapter);
+    await Scoped2.loadSchema();
+    Scoped2.scope('ordered', () => Scoped2.order({ title: 'desc' }));
+    const top = await (Scoped2 as unknown as { ordered: () => { limit: (n: number) => Promise<Scoped2[]> } }).ordered().limit(2);
+    expect(top.map((r) => r.readAttribute('title'))).toEqual(['C', 'B']);
+  });
   test.skip('extending (TODO)', () => {});
   test.skip('group + having (TODO: group/having combinations)', () => {});
-  test.skip('scope_for_create / new from scope (TODO: scope)', () => {});
 
   // joins / includes / preload covered in associations_test.ts now that the
   // surface exists — these slot-level skips remain for the more nuanced

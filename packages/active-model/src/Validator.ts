@@ -28,13 +28,20 @@ const blank = (value: unknown): boolean => {
 
 /** Common options shared across all validators. */
 export type ValidatorOptions<T> = {
-  message?: string;
+  /**
+   * Custom error message. Can be a string or a function that receives
+   * `(record, data)` like Rails' Proc messages, where `data` is
+   * `{ attribute, value, type }`.
+   */
+  message?: string | ((record: T, data: { attribute: string; value: unknown; type?: string }) => string);
   if?: (record: T) => boolean;
   unless?: (record: T) => boolean;
   allowNull?: boolean;
   allowBlank?: boolean;
   /** Limit the validator to one or more validation contexts (e.g. `'create'`). */
   on?: ValidationContext | ValidationContext[];
+  /** Skip the validator when the validation context matches one of these. */
+  exceptOn?: ValidationContext | ValidationContext[];
   /**
    * When set, validator failures throw immediately instead of accumulating
    * in `record.errors`. Pass `true` for a generic `StrictValidationFailed`
@@ -54,10 +61,12 @@ export class StrictValidationFailed extends Error {
 const shouldValidate = <T>(record: T, options: ValidatorOptions<T> = {}, context?: ValidationContext): boolean => {
   if (options.on !== undefined) {
     const wanted = Array.isArray(options.on) ? options.on : [options.on];
-    // If `on` is set but no context was supplied, skip — matches Rails behavior
-    // where context-bound validators only fire on save (which always supplies one).
     if (context === undefined) return false;
     if (!wanted.includes(context)) return false;
+  }
+  if (options.exceptOn !== undefined && context !== undefined) {
+    const excluded = Array.isArray(options.exceptOn) ? options.exceptOn : [options.exceptOn];
+    if (excluded.includes(context)) return false;
   }
   if (options.if && !options.if(record)) return false;
   if (options.unless && options.unless(record)) return false;
@@ -82,9 +91,27 @@ const recordError = <T>(
   options: ValidatorOptions<T>,
   errors: Errors,
   attribute: string,
-  message: string,
+  defaultMessage: string,
   meta: { type?: string; options?: Record<string, unknown> } = {},
+  record?: T,
+  value?: unknown,
 ): void => {
+  // Resolve a Proc-style message if the user supplied one; otherwise use
+  // their string override; otherwise fall back to the default for this
+  // validator.
+  let message: string;
+  if (typeof options.message === 'function') {
+    if (record === undefined) {
+      // No record context — fall back to default.
+      message = defaultMessage;
+    } else {
+      message = options.message(record, { attribute, value, type: meta.type });
+    }
+  } else if (typeof options.message === 'string') {
+    message = options.message;
+  } else {
+    message = defaultMessage;
+  }
   if (options.strict) {
     const fullMessage = errors.fullMessage(attribute, message);
     if (typeof options.strict === 'function') {
@@ -120,7 +147,7 @@ export class PresenceValidator<T> implements Validator<T> {
     if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (blank(value)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? "can't be blank", { type: 'presence' });
+      recordError(this.options, errors, this.attribute, "can't be blank", { type: 'presence' }, record, value);
     }
   }
 }
@@ -135,7 +162,7 @@ export class AbsenceValidator<T> implements Validator<T> {
     if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (!blank(value)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? 'must be blank', { type: 'absence' });
+      recordError(this.options, errors, this.attribute, 'must be blank', { type: 'absence' }, record, value);
     }
   }
 }
@@ -165,24 +192,24 @@ export class LengthValidator<T> implements Validator<T> {
     if (o.in) {
       const [min, max] = o.in;
       if (len < min) {
-        recordError(this.options, errors, this.attribute, o.tooShort ?? `is too short (minimum is ${min} characters)`, { type: 'length' });
+        recordError(this.options, errors, this.attribute, o.tooShort ?? `is too short (minimum is ${min} characters)`, { type: 'length' }, record, value);
         return;
       }
       if (len > max) {
-        recordError(this.options, errors, this.attribute, o.tooLong ?? `is too long (maximum is ${max} characters)`, { type: 'length' });
+        recordError(this.options, errors, this.attribute, o.tooLong ?? `is too long (maximum is ${max} characters)`, { type: 'length' }, record, value);
         return;
       }
     }
     if (o.is !== undefined && len !== o.is) {
-      recordError(this.options, errors, this.attribute, o.wrongLength ?? `is the wrong length (should be ${o.is} characters)`, { type: 'length' });
+      recordError(this.options, errors, this.attribute, o.wrongLength ?? `is the wrong length (should be ${o.is} characters)`, { type: 'length' }, record, value);
       return;
     }
     if (o.minimum !== undefined && len < o.minimum) {
-      recordError(this.options, errors, this.attribute, o.tooShort ?? `is too short (minimum is ${o.minimum} characters)`, { type: 'length' });
+      recordError(this.options, errors, this.attribute, o.tooShort ?? `is too short (minimum is ${o.minimum} characters)`, { type: 'length' }, record, value);
       return;
     }
     if (o.maximum !== undefined && len > o.maximum) {
-      recordError(this.options, errors, this.attribute, o.tooLong ?? `is too long (maximum is ${o.maximum} characters)`, { type: 'length' });
+      recordError(this.options, errors, this.attribute, o.tooLong ?? `is too long (maximum is ${o.maximum} characters)`, { type: 'length' }, record, value);
       return;
     }
   }
@@ -209,10 +236,10 @@ export class FormatValidator<T> implements Validator<T> {
     if (skipForNullable(value, this.options)) return;
     const str = value == null ? '' : String(value);
     if (this.options.with && !this.options.with.test(str)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? 'is invalid', { type: 'format' });
+      recordError(this.options, errors, this.attribute, 'is invalid', { type: 'format' }, record, value);
     }
     if (this.options.without && this.options.without.test(str)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? 'is invalid', { type: 'format' });
+      recordError(this.options, errors, this.attribute, 'is invalid', { type: 'format' }, record, value);
     }
   }
 }
@@ -230,7 +257,7 @@ export class InclusionValidator<T> implements Validator<T> {
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     if (!this.options.in.includes(value)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? 'is not included in the list', { type: 'inclusion' });
+      recordError(this.options, errors, this.attribute, 'is not included in the list', { type: 'inclusion' }, record, value);
     }
   }
 }
@@ -248,7 +275,7 @@ export class ExclusionValidator<T> implements Validator<T> {
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     if (this.options.in.includes(value)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? 'is reserved', { type: 'exclusion' });
+      recordError(this.options, errors, this.attribute, 'is reserved', { type: 'exclusion' }, record, value);
     }
   }
 }
@@ -276,7 +303,7 @@ export class NumericalityValidator<T> implements Validator<T> {
     if (skipForNullable(value, this.options)) return;
     const num = Number(value);
     if (Number.isNaN(num) || !Number.isFinite(num)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? 'is not a number', { type: 'numericality' });
+      recordError(this.options, errors, this.attribute, 'is not a number', { type: 'numericality' }, record, value);
       return;
     }
     const o = this.options;
@@ -284,19 +311,19 @@ export class NumericalityValidator<T> implements Validator<T> {
       recordError(this.options, errors, this.attribute, 'must be an integer', { type: 'numericality.only_integer' });
     }
     if (o.greaterThan !== undefined && !(num > o.greaterThan)) {
-      recordError(this.options, errors, this.attribute, `must be greater than ${o.greaterThan}`, { type: 'numericality.greater_than' });
+      recordError(this.options, errors, this.attribute, `must be greater than ${o.greaterThan}`, { type: 'numericality.greater_than' }, record, value);
     }
     if (o.greaterThanOrEqualTo !== undefined && !(num >= o.greaterThanOrEqualTo)) {
-      recordError(this.options, errors, this.attribute, `must be greater than or equal to ${o.greaterThanOrEqualTo}`, { type: 'numericality.greater_than_or_equal_to' });
+      recordError(this.options, errors, this.attribute, `must be greater than or equal to ${o.greaterThanOrEqualTo}`, { type: 'numericality.greater_than_or_equal_to' }, record, value);
     }
     if (o.lessThan !== undefined && !(num < o.lessThan)) {
-      recordError(this.options, errors, this.attribute, `must be less than ${o.lessThan}`, { type: 'numericality.less_than' });
+      recordError(this.options, errors, this.attribute, `must be less than ${o.lessThan}`, { type: 'numericality.less_than' }, record, value);
     }
     if (o.lessThanOrEqualTo !== undefined && !(num <= o.lessThanOrEqualTo)) {
-      recordError(this.options, errors, this.attribute, `must be less than or equal to ${o.lessThanOrEqualTo}`, { type: 'numericality.less_than_or_equal_to' });
+      recordError(this.options, errors, this.attribute, `must be less than or equal to ${o.lessThanOrEqualTo}`, { type: 'numericality.less_than_or_equal_to' }, record, value);
     }
     if (o.equalTo !== undefined && num !== o.equalTo) {
-      recordError(this.options, errors, this.attribute, `must be equal to ${o.equalTo}`, { type: 'numericality.equal_to' });
+      recordError(this.options, errors, this.attribute, `must be equal to ${o.equalTo}`, { type: 'numericality.equal_to' }, record, value);
     }
     if (o.odd && num % 2 === 0) recordError(this.options, errors, this.attribute, 'must be odd', { type: 'numericality.odd' });
     if (o.even && num % 2 !== 0) recordError(this.options, errors, this.attribute, 'must be even', { type: 'numericality.even' });
@@ -316,7 +343,7 @@ export class AcceptanceValidator<T> implements Validator<T> {
     const accept = this.options.accept ?? [true, '1', 1];
     const value = reader<T>(this.attribute)(record);
     if (!accept.includes(value)) {
-      recordError(this.options, errors, this.attribute, this.options.message ?? 'must be accepted', { type: 'acceptance' });
+      recordError(this.options, errors, this.attribute, 'must be accepted', { type: 'acceptance' }, record, value);
     }
   }
 }
@@ -338,7 +365,7 @@ export class ConfirmationValidator<T> implements Validator<T> {
     const b = confirmation == null ? '' : String(confirmation);
     const equal = this.options.caseSensitive === false ? a.toLowerCase() === b.toLowerCase() : a === b;
     if (!equal) {
-      errors.add(`${this.attribute}Confirmation`, this.options.message ?? "doesn't match", { type: 'confirmation' });
+      recordError(this.options, errors, `${this.attribute}Confirmation`, "doesn't match", { type: 'confirmation' }, record, value);
     }
   }
 }

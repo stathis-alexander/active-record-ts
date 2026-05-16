@@ -127,7 +127,11 @@ describe('Calculations — grouping', () => {
     expect(found).toBe(true);
   });
 
-  test.skip('count_with_distinct (TODO: count + distinct interaction)', () => {});
+  test('count({ distinct: true }) counts unique values', async () => {
+    await Developer.create({ name: 'Z', salary: 100000 });   // duplicate salary
+    expect(await Developer.count({ distinct: true, column: 'salary' })).toBe(3);
+    expect(await Developer.count('salary')).toBe(5);
+  });
 });
 
 describe('Calculations — special', () => {

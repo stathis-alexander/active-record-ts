@@ -65,7 +65,13 @@ describe('Finder — find by id', () => {
     ).rejects.toThrow();
   });
 
-  test.skip('find_by_title_and_id_with_hash (TODO: multi-attribute dynamic finder)', () => {});
+  test('multi-attribute dynamic finder via findByDynamic', async () => {
+    type Dyn = { findByDynamic: (name: string, ...args: unknown[]) => Promise<Topic | null> };
+    const t = await (Topic as unknown as Dyn).findByDynamic('findByTitleAndAuthorName', 'first', 'Alex');
+    expect(t?.readAttribute('title')).toBe('first');
+    const miss = await (Topic as unknown as Dyn).findByDynamic('findByTitleAndAuthorName', 'first', 'NoOne');
+    expect(miss).toBeNull();
+  });
 });
 
 describe('Finder — find_or_initialize_by / find_or_create_by', () => {
