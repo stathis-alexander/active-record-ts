@@ -301,23 +301,28 @@ export class Base extends Model {
   }
 
   static async count(column?: string): Promise<number> {
-    return new Relation(this as unknown as BaseConstructor<Base>).count(column);
+    const result = await new Relation(this as unknown as BaseConstructor<Base>).count(column);
+    return result as number;
   }
 
   static async sum(column: string): Promise<number> {
-    return new Relation(this as unknown as BaseConstructor<Base>).sum(column);
+    const result = await new Relation(this as unknown as BaseConstructor<Base>).sum(column);
+    return result as number;
   }
 
   static async minimum(column: string): Promise<number | null> {
-    return new Relation(this as unknown as BaseConstructor<Base>).minimum(column);
+    const result = await new Relation(this as unknown as BaseConstructor<Base>).minimum(column);
+    return result as number | null;
   }
 
   static async maximum(column: string): Promise<number | null> {
-    return new Relation(this as unknown as BaseConstructor<Base>).maximum(column);
+    const result = await new Relation(this as unknown as BaseConstructor<Base>).maximum(column);
+    return result as number | null;
   }
 
   static async average(column: string): Promise<number | null> {
-    return new Relation(this as unknown as BaseConstructor<Base>).average(column);
+    const result = await new Relation(this as unknown as BaseConstructor<Base>).average(column);
+    return result as number | null;
   }
 
   static async exists<This extends typeof Base>(
@@ -416,7 +421,7 @@ export class Base extends Model {
    */
   async save(): Promise<boolean> {
     const ctor = this.constructor as typeof Base;
-    if (!(await this.validate())) return false;
+    if (!(await this.validate(this.newRecord ? 'create' : 'update'))) return false;
     let inner = false;
     const outer = await ctor.runCallbacks('save', this, async () => {
       inner = await ctor.runCallbacks(this.newRecord ? 'create' : 'update', this, async () => {
@@ -486,6 +491,34 @@ export class Base extends Model {
     }
     if (this._persisted) await this.save();
     return this;
+  }
+
+  /**
+   * Add `by` (default 1) to a numeric attribute. The change is in memory
+   * only — call `save()` or use `incrementSave()` to persist. Mirrors
+   * Rails' `record.increment(:counter)`.
+   */
+  increment(attribute: string, by: number = 1): this {
+    const current = this.readAttribute(attribute);
+    const base = typeof current === 'number' ? current : Number(current ?? 0);
+    this.writeAttribute(attribute, base + by);
+    return this;
+  }
+
+  /** Persist the increment via a single UPDATE. Skips dirty diff. */
+  async incrementSave(attribute: string, by: number = 1): Promise<this> {
+    this.increment(attribute, by);
+    if (this._persisted) await this.save();
+    return this;
+  }
+
+  /** Mirror of `increment` but subtracts. */
+  decrement(attribute: string, by: number = 1): this {
+    return this.increment(attribute, -by);
+  }
+
+  async decrementSave(attribute: string, by: number = 1): Promise<this> {
+    return this.incrementSave(attribute, -by);
   }
 
   // ──────────────────────────── internals ────────────────────────────

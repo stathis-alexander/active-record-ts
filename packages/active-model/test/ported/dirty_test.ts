@@ -136,7 +136,16 @@ describe('Dirty', () => {
 
   test.skip('attribute_will_change! with a symbol (TODO: will_change!)', () => {});
 
-  test.skip('clear_changes_information resets all changes (TODO: clearChangesInformation)', () => {});
+  test('clear_changes_information resets all changes', () => {
+    model.name = 'Dmitry';
+    expect(model.attributeChanged('name')).toBe(true);
+    model.commitChanges();
+    model.name = 'Bob';
+    expect(model.savedChanges()['name']).toEqual([null, 'Dmitry']);
+    model.clearChangesInformation();
+    expect(model.savedChanges()).toEqual({});
+    expect(model.changed()).toEqual([]);
+  });
 
   test('restore_attributes restores all previous data', () => {
     model.name = 'Dmitry';

@@ -95,9 +95,51 @@ describe('Callbacks — halt semantics', () => {
 });
 
 describe('Callbacks — on: filters', () => {
-  test.skip('before_validation on: :create only fires for new records (TODO: on: filters)', () => {});
-  test.skip('before_validation on: :update only fires for persisted (TODO)', () => {});
-  test.skip('after_validation context filtering (TODO)', () => {});
+  test('before_validation on: "create" only fires for new records', async () => {
+    class WithCtx extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      log: string[] = [];
+    }
+    WithCtx.beforeValidation((m: WithCtx) => { m.log.push('any'); });
+    WithCtx.beforeValidation((m: WithCtx) => { m.log.push('on-create'); }, { on: 'create' });
+    WithCtx.beforeValidation((m: WithCtx) => { m.log.push('on-update'); }, { on: 'update' });
+    WithCtx.useConnection(fx.adapter);
+    await WithCtx.loadSchema();
+
+    const m = new WithCtx({ name: 'A' });
+    await m.save();
+    expect(m.log).toContain('on-create');
+    expect(m.log).not.toContain('on-update');
+
+    m.log = [];
+    m.writeAttribute('name', 'B');
+    await m.save();
+    expect(m.log).toContain('on-update');
+    expect(m.log).not.toContain('on-create');
+  });
+
+  test('validators with on: "create" only check new records', async () => {
+    class WithCtxValidator extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+    }
+    WithCtxValidator.validatesPresenceOf('name', { on: 'create' });
+    WithCtxValidator.useConnection(fx.adapter);
+    await WithCtxValidator.loadSchema();
+
+    const m = new WithCtxValidator();
+    expect(await m.save()).toBe(false);
+    expect(m.errors.on('name').length > 0).toBe(true);
+
+    // Once persisted with a name, a subsequent update should not trigger the create-only validator.
+    m.writeAttribute('name', 'X');
+    await m.save();
+    m.writeAttribute('name', '');
+    expect(await m.save()).toBe(true);
+  });
+
+  test.skip('after_validation context filtering (TODO: nuanced after-context tests)', () => {});
 });
 
 describe('Callbacks — Proc / block / object', () => {

@@ -29,6 +29,7 @@ import {
   NumericalityValidator,
   type NumericalityOptions,
   PresenceValidator,
+  type ValidationContext,
   type Validator,
   type ValidatorOptions,
 } from './Validator';
@@ -137,23 +138,27 @@ export class Model {
   restoreAttributes(): void {
     this._attributes.restore();
   }
+  /** Reset both pending and last-saved changes — Rails' `clear_changes_information`. */
+  clearChangesInformation(): void {
+    this._attributes.clearChanges();
+  }
 
   // ──────────────────────────── validation ────────────────────────────
 
-  async validate(): Promise<boolean> {
+  async validate(context?: ValidationContext): Promise<boolean> {
     this.errors.clear();
     const ctor = this.constructor as typeof Model;
     const reg = getRegistry<this>(ctor);
     await reg.callbacks.run('validation', this, async () => {
-      for (const v of reg.validators) await v.validate(this, this.errors);
-    });
+      for (const v of reg.validators) await v.validate(this, this.errors, context);
+    }, context);
     return this.errors.empty;
   }
-  async isValid(): Promise<boolean> {
-    return this.validate();
+  async isValid(context?: ValidationContext): Promise<boolean> {
+    return this.validate(context);
   }
-  async isInvalid(): Promise<boolean> {
-    return !(await this.validate());
+  async isInvalid(context?: ValidationContext): Promise<boolean> {
+    return !(await this.validate(context));
   }
 
   // ──────────────────────────── helpers ────────────────────────────
@@ -240,23 +245,35 @@ export class Model {
 
   // ──────────────────────────── callbacks ────────────────────────────
 
-  /** Register a callback for `event` of `kind`. */
+  /** Options that can be passed to any callback registration helper. */
   static setCallback<This extends typeof Model>(
     this: This,
     event: CallbackEvent,
     kind: CallbackKind,
     fn: CallbackFn<InstanceType<This>> | AroundCallbackFn<InstanceType<This>>,
-    options?: { if?: (record: InstanceType<This>) => boolean; unless?: (record: InstanceType<This>) => boolean },
+    options?: {
+      if?: (record: InstanceType<This>) => boolean;
+      unless?: (record: InstanceType<This>) => boolean;
+      on?: string | string[];
+    },
   ): This {
     getRegistry(this).callbacks.add(event, kind, fn as never, options as never);
     return this;
   }
 
-  static beforeValidation<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
-    return this.setCallback('validation', 'before', fn);
+  static beforeValidation<This extends typeof Model>(
+    this: This,
+    fn: CallbackFn<InstanceType<This>>,
+    options?: { on?: string | string[]; if?: (record: InstanceType<This>) => boolean; unless?: (record: InstanceType<This>) => boolean },
+  ): This {
+    return this.setCallback('validation', 'before', fn, options);
   }
-  static afterValidation<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
-    return this.setCallback('validation', 'after', fn);
+  static afterValidation<This extends typeof Model>(
+    this: This,
+    fn: CallbackFn<InstanceType<This>>,
+    options?: { on?: string | string[]; if?: (record: InstanceType<This>) => boolean; unless?: (record: InstanceType<This>) => boolean },
+  ): This {
+    return this.setCallback('validation', 'after', fn, options);
   }
   static beforeSave<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
     return this.setCallback('save', 'before', fn);
@@ -292,7 +309,8 @@ export class Model {
     event: CallbackEvent,
     record: InstanceType<This>,
     body: () => Promise<void>,
+    context?: string,
   ): Promise<boolean> {
-    return getRegistry(this).callbacks.run(event, record, body);
+    return getRegistry(this).callbacks.run(event, record, body, context);
   }
 }

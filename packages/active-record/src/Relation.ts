@@ -363,44 +363,61 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return rows.length > 0;
   }
 
-  async count(column?: string): Promise<number> {
-    return this.aggregate('COUNT', column ?? '*');
+  async count(column?: string): Promise<number | Map<unknown, number>> {
+    return (await this.aggregate('COUNT', column ?? '*')) as number | Map<unknown, number>;
   }
 
-  async sum(column: string): Promise<number> {
-    return this.aggregate('SUM', column);
+  async sum(column: string): Promise<number | Map<unknown, number>> {
+    return (await this.aggregate('SUM', column)) as number | Map<unknown, number>;
   }
 
-  async minimum(column: string): Promise<number | null> {
+  async minimum(column: string): Promise<number | null | Map<unknown, number | null>> {
     return this.aggregate('MIN', column, { allowNull: true });
   }
 
-  async maximum(column: string): Promise<number | null> {
+  async maximum(column: string): Promise<number | null | Map<unknown, number | null>> {
     return this.aggregate('MAX', column, { allowNull: true });
   }
 
-  async average(column: string): Promise<number | null> {
+  async average(column: string): Promise<number | null | Map<unknown, number | null>> {
     return this.aggregate('AVG', column, { allowNull: true });
   }
 
-  /** Issue a single-projection aggregate query and coerce the scalar result to a number. */
-  private async aggregate(fn: string, column: string, options?: { allowNull: true }): Promise<number>;
-  private async aggregate(fn: string, column: string, options: { allowNull: true }): Promise<number | null>;
-  private async aggregate(fn: string, column: string, options?: { allowNull?: boolean }): Promise<number | null> {
+  /**
+   * Issue a single-projection aggregate. When the relation has a `group`
+   * clause, returns a `Map<groupKey, aggregate>` keyed by the group value;
+   * otherwise returns a scalar number.
+   */
+  private async aggregate(fn: string, column: string, options?: { allowNull: boolean }): Promise<number | null | Map<unknown, number | null>> {
     const manager = this.buildArel();
-    manager.setProjections([Arel.sql(`${fn}(${column})`)]);
+    const groupCols = this.state.groupValues;
+    const aggregateSql = `${fn}(${column})`;
+    if (groupCols.length === 0) {
+      manager.setProjections([Arel.sql(aggregateSql)]);
+      const [sql, binds] = this.klass.connection().toSql(manager);
+      const rows = await this.klass.connection().execute(sql, binds);
+      return coerceAggregate(rows[0] ? Object.values(rows[0])[0] : undefined, options?.allowNull);
+    }
+    // Build projections: `group_col AS group_0`, `aggregate AS value`.
+    const projections: Expression[] = [];
+    const groupAliases: string[] = [];
+    groupCols.forEach((g, i) => {
+      const alias = `group_${i}`;
+      groupAliases.push(alias);
+      projections.push(Arel.sql(`${groupExpressionToSql(g)} AS ${alias}`));
+    });
+    projections.push(Arel.sql(`${aggregateSql} AS value`));
+    manager.setProjections(projections);
     const [sql, binds] = this.klass.connection().toSql(manager);
     const rows = await this.klass.connection().execute(sql, binds);
-    if (!rows[0]) return options?.allowNull ? null : 0;
-    const value = Object.values(rows[0])[0];
-    if (value === null || value === undefined) return options?.allowNull ? null : 0;
-    if (typeof value === 'number') return value;
-    if (typeof value === 'bigint') return Number(value);
-    if (typeof value === 'string') {
-      const n = Number(value);
-      return Number.isNaN(n) ? (options?.allowNull ? null : 0) : n;
+    const map = new Map<unknown, number | null>();
+    for (const row of rows) {
+      const key = groupAliases.length === 1
+        ? row[groupAliases[0]!]
+        : groupAliases.map((a) => row[a]);
+      map.set(key, coerceAggregate(row['value'], options?.allowNull));
     }
-    return options?.allowNull ? null : 0;
+    return map;
   }
 
   async pluck<R = unknown>(...columns: string[]): Promise<R[]> {
@@ -453,6 +470,31 @@ export class RecordNotFound extends Error {
     super(message);
   }
 }
+
+/** Coerce a DB-returned aggregate scalar into a JS number (or null when allowed). */
+const coerceAggregate = (value: unknown, allowNull = false): number | null => {
+  if (value === null || value === undefined) return allowNull ? null : 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'string') {
+    const n = Number(value);
+    if (!Number.isNaN(n)) return n;
+  }
+  return allowNull ? null : 0;
+};
+
+/** Render a group expression to a SQL fragment for projection aliasing. */
+const groupExpressionToSql = (expr: Expression): string => {
+  if (expr instanceof Arel.Nodes.SqlLiteral) return expr.toString();
+  if (typeof expr === 'object' && expr !== null && 'relation' in expr && 'name' in expr) {
+    // Attribute-like: `"table"."column"`
+    const attr = expr as { relation: { name: string | { toString(): string } }; name: string };
+    const rel = typeof attr.relation.name === 'string' ? attr.relation.name : attr.relation.name.toString();
+    return `"${rel}"."${attr.name}"`;
+  }
+  // Fall back to the visitor-rendered form.
+  return String(expr);
+};
 
 const collapseAnd = (clauses: Expression[]): Expression | null => {
   if (clauses.length === 0) return null;

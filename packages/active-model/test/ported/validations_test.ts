@@ -102,7 +102,17 @@ describe('Validations', () => {
     expect(t.errors.on('title')[0]).toBe("can't be blank");
   });
 
-  test.skip('validation with :if and :on (TODO: contexts)', () => {});
+  test('validation context: validates only fires when context matches', async () => {
+    Topic.validatesPresenceOf('title', { on: 'create' });
+    const t = new Topic();
+    // No context → validators with `on` are skipped.
+    expect(await t.isValid()).toBe(true);
+    // `on: 'create'` matches.
+    expect(await t.isValid('create')).toBe(false);
+    expect(t.errors.on('title').length > 0).toBe(true);
+    // Different context → skipped.
+    expect(await t.isValid('update')).toBe(true);
+  });
 
   test('invalid is the opposite of valid', async () => {
     Topic.validatesPresenceOf('title');
@@ -140,6 +150,14 @@ describe('Validations', () => {
 
   test.skip('validate! raises ValidationError (TODO: validate-bang)', () => {});
   test.skip('validate! with context (TODO: contexts)', () => {});
+  test('validation context: array of contexts', async () => {
+    Topic.validatesPresenceOf('title', { on: ['create', 'publish'] });
+    const t = new Topic();
+    expect(await t.isValid('create')).toBe(false);
+    expect(await t.isValid('publish')).toBe(false);
+    expect(await t.isValid('update')).toBe(true);
+  });
+
   test.skip('strict validation in validates (TODO: strict mode)', () => {});
   test.skip('strict validation does not fail when valid (TODO: strict mode)', () => {});
   test.skip('strict validation particular validator (TODO)', () => {});

@@ -127,10 +127,37 @@ describe('Persistence — create / save / update / destroy', () => {
   test.skip('destroy_many / destroy_many_with_invalid_id (TODO: destroy by ids)', () => {});
   test.skip('delete_many (TODO: delete by ids)', () => {});
 
-  test.skip('increment attribute / decrement attribute (TODO: increment/decrement)', () => {});
-  test.skip('increment with :touch (TODO: touch)', () => {});
-  test.skip('increment new record raises (TODO)', () => {});
-  test.skip('increment destroyed record raises (TODO)', () => {});
+  test('increment attribute', async () => {
+    const t = await Topic.create({ title: 'a', replies_count: 5 });
+    t.increment('replies_count');
+    expect(t.readAttribute('replies_count')).toBe(6);
+    t.increment('replies_count', 4);
+    expect(t.readAttribute('replies_count')).toBe(10);
+  });
+
+  test('decrement attribute', async () => {
+    const t = await Topic.create({ title: 'a', replies_count: 5 });
+    t.decrement('replies_count');
+    expect(t.readAttribute('replies_count')).toBe(4);
+    t.decrement('replies_count', 2);
+    expect(t.readAttribute('replies_count')).toBe(2);
+  });
+
+  test('incrementSave persists the change', async () => {
+    const t = await Topic.create({ title: 'a', replies_count: 1 });
+    await t.incrementSave('replies_count', 3);
+    const reloaded = await Topic.find(t.id);
+    expect(reloaded.readAttribute('replies_count')).toBe(4);
+  });
+
+  test('increment on a new record updates in-memory only', async () => {
+    const t = new Topic({ title: 'fresh' });
+    t.increment('replies_count');
+    expect(t.readAttribute('replies_count')).toBe(1);
+    expect(t.persisted).toBe(false);
+  });
+
+  test.skip('increment with :touch updates timestamps (TODO: increment+touch)', () => {});
 
   test.skip('becomes converts STI subclass (TODO: STI)', () => {});
   test.skip('becomes after reload_schema_from_cache (TODO)', () => {});
@@ -147,9 +174,23 @@ describe('Persistence — reload + touch', () => {
     expect(t.readAttribute('title')).toBe('original');
   });
 
-  test.skip('touch updates updated_at without touching other columns (TODO: touch + updated_at schema)', () => {});
-  test.skip('touch with specific columns (TODO)', () => {});
-  test.skip('touch_all on a relation (TODO)', () => {});
+  test('touch updates updated_at and persists', async () => {
+    const t = await Topic.create({ title: 'a' });
+    const before = t.readAttribute('updated_at');
+    await new Promise((r) => setTimeout(r, 10));
+    await t.touch();
+    const after = t.readAttribute('updated_at');
+    expect(after).not.toBe(before);
+    expect((after as Date).getTime()).toBeGreaterThanOrEqual((before as Date | null)?.getTime() ?? 0);
+  });
+
+  test('touch with specific columns', async () => {
+    const t = await Topic.create({ title: 'a' });
+    await t.touch('updated_at');
+    expect(t.readAttribute('updated_at')).toBeInstanceOf(Date);
+  });
+
+  test.skip('touch_all on a relation (TODO: relation-level touch)', () => {});
 });
 
 describe('Persistence — assignment', () => {
