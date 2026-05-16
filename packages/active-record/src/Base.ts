@@ -526,6 +526,18 @@ export class Base extends Model {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).none();
   }
 
+  static includes<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).includes(...names);
+  }
+
+  static preload<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).preload(...names);
+  }
+
+  static joins<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).joins(...names);
+  }
+
   static async find<This extends typeof Base>(this: This, ids: readonly unknown[]): Promise<InstanceType<This>[]>;
   static async find<This extends typeof Base>(this: This, id: unknown): Promise<InstanceType<This>>;
   static async find<This extends typeof Base>(this: This, ...ids: unknown[]): Promise<InstanceType<This>[]>;
