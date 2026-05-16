@@ -155,6 +155,11 @@ export class Model {
     const names = reg.attributeSet.keys();
     defineAccessors(ctor, names);
     definePerAttributeDirty(ctor, names);
+    // Fire after_initialize callbacks. We use the synchronous chain via
+    // a promise so async hooks still run, but constructors can't await —
+    // any errors will surface as unhandled rejections, which matches
+    // Rails' "don't put expensive logic in after_initialize" expectation.
+    void reg.callbacks.run('initialize', this, async () => { /* body */ });
   }
 
   // ──────────────────────────── attribute IO ────────────────────────────
@@ -421,6 +426,21 @@ export class Model {
     options?: { on?: 'create' | 'update' | 'destroy' | Array<'create' | 'update' | 'destroy'> },
   ): This {
     return this.setCallback('rollback', 'after', fn, options as never);
+  }
+
+  /** Run `fn` whenever a new instance is constructed. */
+  static afterInitialize<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
+    return this.setCallback('initialize', 'after', fn);
+  }
+
+  /** Run `fn` when a record is hydrated from the database. */
+  static afterFind<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
+    return this.setCallback('find', 'after', fn);
+  }
+
+  /** Run `fn` after `touch()`. */
+  static afterTouch<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
+    return this.setCallback('touch', 'after', fn);
   }
 
   /** Run a registered callback chain — typically used by ActiveRecord persistence. */

@@ -155,13 +155,51 @@ describe('Callbacks — inheritance', () => {
 });
 
 describe('Callbacks — after_commit / after_rollback / after_initialize', () => {
-  test.skip('after_commit on create (TODO: after_commit)', () => {});
-  test.skip('after_commit on update (TODO)', () => {});
-  test.skip('after_commit on destroy (TODO)', () => {});
-  test.skip('after_rollback on save (TODO: after_rollback)', () => {});
-  test.skip('after_initialize (TODO: lifecycle event)', () => {});
-  test.skip('after_find (TODO: lifecycle event)', () => {});
-  test.skip('after_touch (TODO: touch callbacks)', () => {});
+  // after_commit/after_rollback covered in transactions_test.ts.
+
+  test('after_initialize fires whenever new instance is constructed', async () => {
+    class WithInit extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      initialized = false;
+    }
+    WithInit.afterInitialize((m: WithInit) => { m.initialized = true; });
+    WithInit.useConnection(fx.adapter);
+    await WithInit.loadSchema();
+    const m = new WithInit({ name: 'X' });
+    // Wait one microtask — the fire-and-forget hook completes.
+    await Promise.resolve();
+    expect(m.initialized).toBe(true);
+  });
+
+  test('after_find fires when records are hydrated from the DB', async () => {
+    class WithFind extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      foundCount = 0;
+    }
+    WithFind.afterFind((m: WithFind) => { m.foundCount += 1; });
+    WithFind.useConnection(fx.adapter);
+    await WithFind.loadSchema();
+    await WithFind.create({ name: 'A' });
+    const found = await WithFind.first();
+    await Promise.resolve();
+    expect(found?.foundCount).toBe(1);
+  });
+
+  test('after_touch fires after `touch()`', async () => {
+    class WithTouch extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      touched = 0;
+    }
+    WithTouch.afterTouch((m: WithTouch) => { m.touched += 1; });
+    WithTouch.useConnection(fx.adapter);
+    await WithTouch.loadSchema();
+    const m = await WithTouch.create({ name: 'A' });
+    await m.touch();
+    expect(m.touched).toBe(1);
+  });
 });
 
 describe('Callbacks — recursion / re-entrancy', () => {

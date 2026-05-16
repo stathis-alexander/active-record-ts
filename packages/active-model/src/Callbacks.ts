@@ -17,7 +17,10 @@ export type CallbackEvent =
   | 'update'
   | 'destroy'
   | 'commit'
-  | 'rollback';
+  | 'rollback'
+  | 'initialize'
+  | 'find'
+  | 'touch';
 
 export type CallbackFn<T> = (record: T) => void | boolean | Promise<void | boolean>;
 export type AroundCallbackFn<T> = (record: T, run: () => Promise<void>) => Promise<void>;
@@ -48,6 +51,9 @@ export class CallbackChain<T> {
     destroy: [],
     commit: [],
     rollback: [],
+    initialize: [],
+    find: [],
+    touch: [],
   };
 
   /** Register a new callback under `event` of `kind`. */

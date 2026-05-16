@@ -57,6 +57,17 @@ export class Person extends Base {
   declare last_name: string;
 }
 
+export class Membership extends Base {
+  static override tableName = 'memberships';
+  declare user_id: number;
+  declare team_id: number;
+}
+
+export class Team extends Base {
+  static override tableName = 'teams';
+  declare name: string;
+}
+
 class CreateTopics extends Migration {
   static override version = '001-topics';
   override async up() {
@@ -121,6 +132,23 @@ class CreatePeople extends Migration {
   }
 }
 
+class CreateTeams extends Migration {
+  static override version = '007-teams';
+  override async up() {
+    await this.createTable('teams', (t) => t.string('name'));
+  }
+}
+
+class CreateMemberships extends Migration {
+  static override version = '008-memberships';
+  override async up() {
+    await this.createTable('memberships', (t) => {
+      t.integer('user_id');
+      t.integer('team_id');
+    });
+  }
+}
+
 const MIGRATIONS: MigrationConstructor[] = [
   CreateTopics,
   CreatePosts,
@@ -128,9 +156,11 @@ const MIGRATIONS: MigrationConstructor[] = [
   CreateAuthors,
   CreateComments,
   CreatePeople,
+  CreateTeams,
+  CreateMemberships,
 ];
 
-const KLASSES = [Topic, Post, Developer, Author, Comment, Person];
+const KLASSES = [Topic, Post, Developer, Author, Comment, Person, Team, Membership];
 
 export type Fixtures = {
   adapter: SQLiteAdapter;

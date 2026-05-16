@@ -53,6 +53,20 @@ export const defineAssociationAccessor = (ctor: typeof Base, reflection: Associa
   const { name, kind } = reflection;
   if (Object.prototype.hasOwnProperty.call(ctor.prototype, name)) return;
 
+  // has_many :through resolves lazily via the intermediate association at access time.
+  if (reflection.through) {
+    Object.defineProperty(ctor.prototype, name, {
+      configurable: true,
+      enumerable: false,
+      get(this: Base) {
+        const cache = getAssociationCache(this);
+        if (cache.has(name)) return Promise.resolve((cache.get(name) as Base[]) ?? []);
+        return readThrough(this, reflection);
+      },
+    });
+    return;
+  }
+
   if (kind === 'belongs_to') {
     Object.defineProperty(ctor.prototype, name, {
       configurable: true,
@@ -142,6 +156,47 @@ const readHasOne = async (owner: Base, reflection: AssociationReflection): Promi
   if (reflection.as) conditions[`${reflection.as}_type`] = owner.constructor.name;
   // biome-ignore lint/suspicious/noExplicitAny: dynamic findBy on subclass
   return await (klass as any).findBy(conditions);
+};
+
+/**
+ * `has_many :through` reader. Walks the intermediate association first,
+ * then collects the source association on each intermediate. Implemented
+ * as two batched queries so it stays N+1-free at the access level.
+ */
+const readThrough = async (owner: Base, reflection: AssociationReflection): Promise<Base[]> => {
+  const { lookupAssociation } = await import('./registry');
+  const ownerClass = owner.constructor as typeof Base;
+  const through = lookupAssociation(ownerClass, reflection.through!);
+  if (!through) {
+    throw new Error(`Unknown through-association "${reflection.through}" on ${ownerClass.name}`);
+  }
+  const sourceName = reflection.source ?? singularize(reflection.name);
+  const intermediateRel = buildHasManyRelation(owner, through);
+  const intermediates = await intermediateRel.toArray();
+  if (intermediates.length === 0) return [];
+  const interClass = intermediates[0]!.constructor as typeof Base;
+  if (!lookupAssociation(interClass, sourceName)) {
+    throw new Error(
+      `Through association "${reflection.name}" on ${ownerClass.name}: source "${sourceName}" not found on ${interClass.name}`,
+    );
+  }
+  const { preloadAssociation } = await import('./Preloader');
+  await preloadAssociation(intermediates, sourceName);
+  const results: Base[] = [];
+  for (const mid of intermediates) {
+    const cache = getAssociationCache(mid);
+    const v = cache.get(sourceName);
+    if (Array.isArray(v)) results.push(...v);
+    else if (v) results.push(v);
+  }
+  return results;
+};
+
+const singularize = (word: string): string => {
+  if (word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (word.endsWith('es')) return word.slice(0, -2);
+  if (word.endsWith('s')) return word.slice(0, -1);
+  return word;
 };
 
 const buildHasManyRelation = (owner: Base, reflection: AssociationReflection): Relation<Base> => {
