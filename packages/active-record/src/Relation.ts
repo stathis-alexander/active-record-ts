@@ -10,9 +10,21 @@
 
 import { Arel, Nodes as ArelNodes } from '@arelts/arel';
 import type { Attribute, Expression, SelectManager } from '@arelts/arel';
+
+/** Clause names accepted by `unscope` — mirror Rails' VALID_UNSCOPING_VALUES. */
+export type UnscopeName =
+  | 'where'
+  | 'order'
+  | 'limit'
+  | 'offset'
+  | 'select'
+  | 'group'
+  | 'having'
+  | 'distinct'
+  | 'lock'
+  | 'none';
 import type { Base, BaseConstructor } from './Base';
 import { buildPredicate, type WhereInput } from './predicates';
-import type { Row } from './types';
 
 /** A value usable as an ORDER BY clause — attribute, ordering node, string, or pair. */
 export type OrderInput =
@@ -158,6 +170,88 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     });
   }
 
+  /**
+   * Combine this relation with another via OR. Both must target the same
+   * model class and must not contain incompatible clauses (groups / orders).
+   * The resulting WHERE clause is `(this.wheres) OR (other.wheres)`.
+   */
+  or(other: Relation<T>): Relation<T> {
+    if (other.klass !== this.klass) {
+      throw new Error(`Relation#or expects a relation on ${this.klass.name}, got ${other.klass.name}`);
+    }
+    return this.chain((s) => {
+      const left = collapseAnd(s.whereClauses);
+      const right = collapseAnd(other.state.whereClauses);
+      s.whereClauses = left && right ? [new ArelNodes.Or([left, right]) as unknown as Expression] : (left ? [left] : (right ? [right] : []));
+    });
+  }
+
+  /**
+   * Merge another relation's clauses into this one. Where/order/limit/etc.
+   * are concatenated or overridden (later wins for limit/offset/distinct/
+   * lock/none). Mirrors Rails' `Relation#merge`.
+   */
+  merge(other: Relation<T>): Relation<T> {
+    if (other.klass !== this.klass) {
+      throw new Error(`Relation#merge expects a relation on ${this.klass.name}, got ${other.klass.name}`);
+    }
+    return this.chain((s) => {
+      s.whereClauses.push(...other.state.whereClauses);
+      s.havingClauses.push(...other.state.havingClauses);
+      s.orderValues.push(...other.state.orderValues);
+      s.groupValues.push(...other.state.groupValues);
+      s.selectValues.push(...other.state.selectValues);
+      s.joinValues.push(...other.state.joinValues);
+      if (other.state.limitValue != null) s.limitValue = other.state.limitValue;
+      if (other.state.offsetValue != null) s.offsetValue = other.state.offsetValue;
+      if (other.state.distinctValue) s.distinctValue = true;
+      if (other.state.lockValue != null) s.lockValue = other.state.lockValue;
+      if (other.state.noneValue) s.noneValue = true;
+    });
+  }
+
+  /** Drop specific clauses from the relation. */
+  unscope(...names: UnscopeName[]): Relation<T> {
+    return this.chain((s) => {
+      for (const name of names) {
+        switch (name) {
+          case 'where':    s.whereClauses = []; break;
+          case 'order':    s.orderValues = []; break;
+          case 'limit':    s.limitValue = null; break;
+          case 'offset':   s.offsetValue = null; break;
+          case 'select':   s.selectValues = []; break;
+          case 'group':    s.groupValues = []; break;
+          case 'having':   s.havingClauses = []; break;
+          case 'distinct': s.distinctValue = false; break;
+          case 'lock':     s.lockValue = null; break;
+          case 'none':     s.noneValue = false; break;
+        }
+      }
+    });
+  }
+
+  /** Reverse every order clause (asc <-> desc). */
+  reverseOrder(): Relation<T> {
+    return this.chain((s) => {
+      s.orderValues = s.orderValues.map((o) => reverseOrdering(o));
+    });
+  }
+
+  /** Replace every where clause that targets one of the given attributes. */
+  rewhere(input: WhereInput<T>): Relation<T> {
+    if (typeof input !== 'object' || Array.isArray(input) || input instanceof ArelNodes.Node) {
+      return this.chain((s) => {
+        s.whereClauses = [];
+        s.whereClauses.push(buildPredicate(this.klass, input, false));
+      });
+    }
+    const attributes = new Set(Object.keys(input as Record<string, unknown>));
+    return this.chain((s) => {
+      s.whereClauses = s.whereClauses.filter((clause) => !mentionsAnyAttribute(clause, attributes));
+      s.whereClauses.push(buildPredicate(this.klass, input, false));
+    });
+  }
+
   // ──────────────────────────── building the SelectManager ────────────────────────────
 
   /** Resolve an attribute reference on this relation's table. */
@@ -233,11 +327,28 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return this.limit(n).toArray();
   }
 
-  async find(id: unknown): Promise<T> {
+  async find(ids: readonly unknown[]): Promise<T[]>;
+  async find(id: unknown): Promise<T>;
+  async find(...ids: unknown[]): Promise<T[]>;
+  async find(idOrIds: unknown, ...rest: unknown[]): Promise<T | T[]> {
     const pk = this.klass.primaryKey;
-    const row = await this.where({ [pk]: id } as WhereInput<T>).take();
-    if (!row) throw new RecordNotFound(`Couldn't find ${this.klass.name} with ${pk}=${String(id)}`);
-    return row as T;
+    // Normalize argument forms: find(1) | find([1, 2]) | find(1, 2, 3)
+    const ids = Array.isArray(idOrIds) ? (idOrIds as unknown[]) : [idOrIds, ...rest];
+    if (ids.length === 0) throw new RecordNotFound(`Couldn't find ${this.klass.name} without an ID`);
+    if (ids.length === 1 && !Array.isArray(idOrIds)) {
+      const row = await this.where({ [pk]: ids[0] } as WhereInput<T>).take();
+      if (!row) throw new RecordNotFound(`Couldn't find ${this.klass.name} with ${pk}=${String(ids[0])}`);
+      return row as T;
+    }
+    const records = await this.where({ [pk]: ids } as WhereInput<T>).toArray();
+    if (records.length !== ids.length) {
+      throw new RecordNotFound(
+        `Couldn't find all ${this.klass.name} with ${pk}: (${ids.join(', ')}) (found ${records.length} results, but was looking for ${ids.length})`,
+      );
+    }
+    // Preserve the order of the input ids.
+    const byId = new Map(records.map((r) => [String(r.readAttribute(pk)), r]));
+    return ids.map((id) => byId.get(String(id))).filter((r): r is T => r !== undefined);
   }
 
   async findBy(input: WhereInput<T>): Promise<T | null> {
@@ -253,11 +364,43 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   }
 
   async count(column?: string): Promise<number> {
+    return this.aggregate('COUNT', column ?? '*');
+  }
+
+  async sum(column: string): Promise<number> {
+    return this.aggregate('SUM', column);
+  }
+
+  async minimum(column: string): Promise<number | null> {
+    return this.aggregate('MIN', column, { allowNull: true });
+  }
+
+  async maximum(column: string): Promise<number | null> {
+    return this.aggregate('MAX', column, { allowNull: true });
+  }
+
+  async average(column: string): Promise<number | null> {
+    return this.aggregate('AVG', column, { allowNull: true });
+  }
+
+  /** Issue a single-projection aggregate query and coerce the scalar result to a number. */
+  private async aggregate(fn: string, column: string, options?: { allowNull: true }): Promise<number>;
+  private async aggregate(fn: string, column: string, options: { allowNull: true }): Promise<number | null>;
+  private async aggregate(fn: string, column: string, options?: { allowNull?: boolean }): Promise<number | null> {
     const manager = this.buildArel();
-    manager.setProjections([column ? Arel.sql(`COUNT(${column})`) : Arel.sql('COUNT(*)')]);
+    manager.setProjections([Arel.sql(`${fn}(${column})`)]);
     const [sql, binds] = this.klass.connection().toSql(manager);
     const rows = await this.klass.connection().execute(sql, binds);
-    return numericFromCount(rows[0]);
+    if (!rows[0]) return options?.allowNull ? null : 0;
+    const value = Object.values(rows[0])[0];
+    if (value === null || value === undefined) return options?.allowNull ? null : 0;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'bigint') return Number(value);
+    if (typeof value === 'string') {
+      const n = Number(value);
+      return Number.isNaN(n) ? (options?.allowNull ? null : 0) : n;
+    }
+    return options?.allowNull ? null : 0;
   }
 
   async pluck<R = unknown>(...columns: string[]): Promise<R[]> {
@@ -311,18 +454,34 @@ export class RecordNotFound extends Error {
   }
 }
 
-const numericFromCount = (row: Row | undefined): number => {
-  if (!row) return 0;
-  for (const v of Object.values(row)) {
-    if (typeof v === 'number') return v;
-    if (typeof v === 'bigint') return Number(v);
-    if (typeof v === 'string') {
-      const n = Number(v);
-      if (!Number.isNaN(n)) return n;
-    }
-  }
-  return 0;
+const collapseAnd = (clauses: Expression[]): Expression | null => {
+  if (clauses.length === 0) return null;
+  if (clauses.length === 1) return clauses[0]!;
+  return new ArelNodes.And(clauses) as unknown as Expression;
 };
+
+const reverseOrdering = (expr: Expression): Expression => {
+  if (expr && typeof expr === 'object' && 'reverse' in expr && typeof (expr as { reverse: () => Expression }).reverse === 'function') {
+    return (expr as { reverse: () => Expression }).reverse();
+  }
+  // String / SQL literal order — append a `DESC` flip heuristically (best-effort).
+  return expr;
+};
+
+/** Check whether a where-clause references any of the attributes named in `attrs`. */
+const mentionsAnyAttribute = (node: unknown, attrs: Set<string>): boolean => {
+  if (node == null) return false;
+  if (typeof node !== 'object') return false;
+  const n = node as { name?: unknown; left?: unknown; right?: unknown; children?: unknown[] };
+  if (typeof n.name === 'string' && attrs.has(n.name)) return true;
+  if (n.left && mentionsAnyAttribute(n.left, attrs)) return true;
+  if (n.right && mentionsAnyAttribute(n.right, attrs)) return true;
+  if (Array.isArray(n.children)) {
+    for (const c of n.children) if (mentionsAnyAttribute(c, attrs)) return true;
+  }
+  return false;
+};
+
 
 const buildOrders = <T extends Base>(klass: BaseConstructor<T>, order: OrderInput): Expression[] => {
   if (typeof order === 'string') return [Arel.sql(order)];

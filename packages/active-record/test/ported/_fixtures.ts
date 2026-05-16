@@ -146,7 +146,10 @@ export const setupFixtures = async (): Promise<Fixtures> => {
     classes: KLASSES,
     async reset() {
       for (const K of KLASSES) {
-        await adapter.exec(`DELETE FROM ${adapter.quoteIdentifier(K.effectiveTableName())}`);
+        const name = K.effectiveTableName();
+        await adapter.exec(`DELETE FROM ${adapter.quoteIdentifier(name)}`);
+        // Reset the SQLite AUTOINCREMENT counter so each test sees predictable ids.
+        await adapter.exec(`DELETE FROM sqlite_sequence WHERE name = ?`, [name]).catch(() => {});
       }
     },
     async teardown() {

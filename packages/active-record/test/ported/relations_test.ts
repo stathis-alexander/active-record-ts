@@ -77,14 +77,52 @@ describe('Relations — chainable', () => {
     expect(await Topic.where({ author_name: 'nope' }).exists()).toBe(false);
   });
 
-  test.skip('to_sql produces parameterized SQL (TODO: structural toSql snapshot)', () => {});
+  test('to_sql produces parameterized SQL', async () => {
+    const [sql, binds] = Topic.where({ author_name: 'one' }).order({ title: 'asc' }).limit(5).toSql();
+    expect(sql).toMatch(/SELECT/);
+    expect(sql).toMatch(/FROM "topics"/);
+    expect(sql).toMatch(/WHERE/);
+    expect(sql).toMatch(/ORDER BY/);
+    expect(sql).toMatch(/LIMIT/);
+    expect(binds).toEqual(['one']);
+  });
 
-  test.skip('merge two relations (TODO: merge)', () => {});
-  test.skip('unscope drops a clause (TODO: unscope)', () => {});
-  test.skip('or combines two scopes (TODO: or)', () => {});
-  test.skip('none returns an empty relation that never executes (TODO: verify SQL skip)', () => {});
-  test.skip('rewhere replaces an existing where (TODO: rewhere)', () => {});
-  test.skip('reverse_order (TODO: reverseOrder)', () => {});
+  test('merge two relations', async () => {
+    const a = Topic.where({ author_name: 'one' });
+    const b = Topic.where({ title: 'A' });
+    const rows = await a.merge(b);
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.readAttribute('author_name')).toBe('one');
+  });
+
+  test('unscope drops a clause', async () => {
+    const rows = await Topic.where({ author_name: 'one' }).order({ title: 'desc' }).unscope('where');
+    expect(rows.length).toBe(3);
+  });
+
+  test('or combines two scopes via OR', async () => {
+    const a = Topic.where({ author_name: 'one' });
+    const b = Topic.where({ author_name: 'two' });
+    const rows = await a.or(b).order({ title: 'asc' });
+    expect(rows.map((r) => r.readAttribute('title'))).toEqual(['A', 'B']);
+  });
+
+  test('none returns an empty relation that never executes', async () => {
+    const rows = await Topic.all().none();
+    expect(rows).toEqual([]);
+  });
+
+  test('rewhere replaces an existing where on same attribute', async () => {
+    const rows = await Topic.where({ author_name: 'one' }).rewhere({ author_name: 'two' });
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.readAttribute('author_name')).toBe('two');
+  });
+
+  test('reverse_order flips current orders', async () => {
+    const rows = await Topic.order({ title: 'asc' }).reverseOrder();
+    expect(rows.map((r) => r.readAttribute('title'))).toEqual(['C', 'B', 'A']);
+  });
+
   test.skip('only/except (TODO: filter relation values)', () => {});
   test.skip('extending (TODO)', () => {});
   test.skip('group + having (TODO: group/having combinations)', () => {});
