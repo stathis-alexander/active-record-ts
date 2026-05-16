@@ -14,8 +14,6 @@ export type TableOptions = {
   typeCaster?: TypeCaster;
 };
 
-type EngineType = unknown;
-
 export class Table extends AliasPredications(FactoryMethods) {
   public name: string | SqlLiteralNode;
   public readonly tableAlias?: string;
@@ -23,7 +21,8 @@ export class Table extends AliasPredications(FactoryMethods) {
   private readonly klass?: string;
   private readonly typeCaster?: TypeCaster;
 
-  public static engine: EngineType | undefined;
+  /** Adapter-supplied engine (typically a connection or pool). Untyped — owned by the AR layer above. */
+  public static engine: unknown;
 
   constructor(name: string | SqlLiteralNode, options?: TableOptions) {
     super();

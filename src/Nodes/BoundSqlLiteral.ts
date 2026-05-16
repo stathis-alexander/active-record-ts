@@ -6,15 +6,16 @@ import { hash } from '../utilities/hash';
 const POSITIONAL_PLACEHOLDER = /\?/g;
 const NAMED_PLACEHOLDERS = /(?<!::):([a-zA-Z]\w*)/g;
 
-type PositionalBindsType = BindValue[] | null;
-type NamedBindsType = NamedBinds | null;
-
 export class BoundSqlLiteralNode extends NodeExpression {
   public sqlWithPlaceHolders: string;
-  public positionalBinds: PositionalBindsType;
-  public namedBinds: NamedBindsType;
+  public positionalBinds: BindValue[] | null;
+  public namedBinds: NamedBinds | null;
 
-  constructor(sqlWithPlaceHolders: string, positionalBinds: PositionalBindsType = [], namedBinds: NamedBindsType = {}) {
+  constructor(
+    sqlWithPlaceHolders: string,
+    positionalBinds: BindValue[] | null = [],
+    namedBinds: NamedBinds | null = {},
+  ) {
     super();
 
     const hasPositional = positionalBinds != null && positionalBinds.length > 0;

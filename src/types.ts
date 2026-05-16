@@ -18,12 +18,6 @@ export type * from './Visitors/types';
 export type Quotable = string | number | boolean | bigint | Date | null | undefined;
 
 /**
- * Alias for raw scalar values used by the visitor's value-quoting logic.
- * Equivalent to `Quotable` — kept for backwards compatibility.
- */
-export type Scalar = Quotable;
-
-/**
  * Brand applied to any class whose instances are valid Arel operands. The brand
  * is declared by the expression-bearing mixin chain (Math, Expressions,
  * Predications, OrderPredications, AliasPredication) so that mixin code can use

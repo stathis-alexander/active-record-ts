@@ -3,7 +3,7 @@ import type { Expression } from '../types';
 import { lastOrThrow } from '../utilities/array';
 import { hash } from '../utilities/hash';
 import { buildQuoted } from '../utilities/nodes';
-import { BinaryNode, type RightType } from './Binary';
+import { BinaryNode } from './Binary';
 import { UnaryNode } from './Unary';
 
 export class WhenNode extends BinaryNode {}
@@ -26,13 +26,13 @@ export class CaseNode extends NodeExpression {
     this.default = defaultCase ?? null;
   }
 
-  override when = (condition: Expression, expression?: RightType) => {
+  override when = (condition: Expression, expression?: Expression) => {
     this.conditions.push(new WhenNode(buildQuoted(condition), expression));
     return this;
   };
 
   // biome-ignore lint/suspicious/noThenProperty: it's natural to call this `.then` and we aren't using promises
-  then = (expression: RightType) => {
+  then = (expression: Expression) => {
     lastOrThrow(this.conditions).right = buildQuoted(expression);
     return this;
   };

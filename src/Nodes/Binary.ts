@@ -1,12 +1,8 @@
 import { Attribute } from '../Attribute';
 import { NodeExpression } from '../NodeExpression';
-import type { Expression } from '../types';
 import { hash } from '../utilities/hash';
 import { Nodes } from '.';
-import type { FetchAttributeCallbackType } from './Node';
-
-export type LeftType = Expression;
-export type RightType = Expression;
+import type { FetchAttributeCallback } from './Node';
 
 /**
  * `left` and `right` are typed as `unknown` here so that subclasses can
@@ -41,7 +37,7 @@ export class UnionNode extends BinaryNode {}
 export class UnionAllNode extends BinaryNode {}
 
 export class FetchAttributeBinaryNode extends BinaryNode {
-  override fetchAttribute = (callback: FetchAttributeCallbackType) => {
+  override fetchAttribute = (callback: FetchAttributeCallback) => {
     if (this.left instanceof Attribute) return callback(this.left);
     if (this.right instanceof Attribute) return callback(this.right);
   };

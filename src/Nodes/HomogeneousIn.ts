@@ -1,7 +1,7 @@
 import { Attribute } from '../Attribute';
 import type { BindValue, Quotable } from '../types';
 import { hash } from '../utilities/hash';
-import { type FetchAttributeCallbackType, Node } from './Node';
+import { type FetchAttributeCallback, Node } from './Node';
 
 /** Attribute-like values that HomogeneousIn can target. */
 type HomogeneousAttribute =
@@ -52,7 +52,7 @@ export class HomogeneousInNode extends Node {
 
   procForBinds = (): ((value: unknown) => unknown) => (value) => value;
 
-  override fetchAttribute = (callback: FetchAttributeCallbackType) => {
+  override fetchAttribute = (callback: FetchAttributeCallback) => {
     // Only the `Attribute` variant of `HomogeneousAttribute` is a real Expression;
     // a custom structural attribute (e.g. tests' `TypedNode`) has no fetchable Attribute.
     if (this.attribute instanceof Attribute) return callback(this.attribute);

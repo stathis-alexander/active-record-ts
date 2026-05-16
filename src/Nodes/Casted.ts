@@ -7,7 +7,7 @@ import { UnaryNode } from './Unary';
 /**
  * Wrapped value targeted at a specific column. `value` is typed as `unknown`
  * because the visitor's `quoteValue` step can handle any runtime payload
- * (primitive, Date, plain object → JSON, etc.) — restricting it to `Scalar`
+ * (primitive, Date, plain object → JSON, etc.) — restricting it to `Quotable`
  * would force callers to launder values through casts.
  */
 export class CastedNode extends NodeExpression {
