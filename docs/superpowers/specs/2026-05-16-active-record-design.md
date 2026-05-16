@@ -42,11 +42,12 @@ directory. The arel test suite stays intact during the move.
 One abstract `ConnectionAdapter` plus three concrete adapters. Each adapter
 owns its arel visitor and exposes a uniform query API.
 
-| DB       | Driver                                | Visitor      |
-| -------- | ------------------------------------- | ------------ |
-| SQLite   | `bun:sqlite` (native)                 | `SQLite`     |
-| Postgres | `bun` SQL (`Bun.SQL` / `sql` import)  | `PostgreSQL` |
-| MySQL    | `mysql2/promise` (no Bun-native yet)  | `MySQL`      |
+| DB           | Driver                                   | Visitor      | Adapter id        |
+| ------------ | ---------------------------------------- | ------------ | ----------------- |
+| SQLite       | `bun:sqlite` (native)                    | `SQLite`     | `'sqlite'`        |
+| Postgres     | Bun's `sql` (`Bun.SQL`)                  | `PostgreSQL` | `'postgres-bun'`  |
+| Postgres     | `postgres` npm package (porsager)        | `PostgreSQL` | `'postgres'`      |
+| MySQL        | `mysql2/promise` (no Bun-native yet)     | `MySQL`      | `'mysql'`         |
 
 Adapter responsibilities:
 - `execute(sql, binds)` — run raw SQL, return rows
@@ -220,6 +221,37 @@ rethrown unless it's `Rollback` (our own sentinel error).
 as its `typeCaster`. This lets Arel-generated INSERTs / UPDATEs go
 through the same serialization as model writes.
 
+## Migrations (Phase 1 — included)
+
+Per the user's confirmation, migrations are part of Phase 1.
+
+`Migration` base class with a DSL:
+
+```ts
+class CreateUsers extends Migration {
+  async up(): Promise<void> {
+    this.createTable('users', (t) => {
+      t.string('name', { null: false });
+      t.string('email', { null: false, index: { unique: true } });
+      t.timestamps();
+    });
+  }
+  async down(): Promise<void> {
+    this.dropTable('users');
+  }
+}
+```
+
+- DSL methods: `createTable`, `dropTable`, `addColumn`, `removeColumn`,
+  `changeColumn`, `renameColumn`, `addIndex`, `removeIndex`,
+  `addForeignKey`, `removeForeignKey`, `execute`.
+- Each DSL call emits adapter-specific DDL via the adapter's
+  `SchemaStatements` mixin.
+- Tracked in a `schema_migrations` table (version string, single column,
+  same as Rails). Runner: `Migrator.up(migrations, target?)`,
+  `Migrator.down(migrations, target?)`, `Migrator.rollback(steps?)`.
+- No schema dumper in Phase 1 (deferred).
+
 ## Out of Scope (Phase 1)
 
 These are deferred — too large for an initial port and not blocking the
@@ -227,7 +259,7 @@ core CRUD flow:
 
 - Associations (belongs_to, has_many, has_one, polymorphic, through)
 - Eager loading / `includes` / `preload`
-- Schema migrations (`db:migrate`, schema dump)
+- Schema dumper (`schema.rb` equivalent)
 - Single Table Inheritance / `inheritance_column`
 - Counter cache
 - Encrypted attributes
