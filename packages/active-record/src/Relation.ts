@@ -10,6 +10,8 @@
 
 import { Arel, Nodes as ArelNodes } from '@arelts/arel';
 import type { Attribute, Expression, SelectManager } from '@arelts/arel';
+import { lookupAssociation } from './associations/registry';
+import { preloadAssociation } from './associations/Preloader';
 
 /** Clause names accepted by `unscope` — mirror Rails' VALID_UNSCOPING_VALUES. */
 export type UnscopeName =
@@ -46,6 +48,10 @@ type RelationState = {
   havingClauses: Expression[];
   selectValues: Expression[];
   joinValues: Expression[];
+  /** Association names registered via `includes()` / `preload()`. */
+  preloadValues: string[];
+  /** Association names registered via `joins()`. */
+  joinAssociations: string[];
   limitValue: number | null;
   offsetValue: number | null;
   distinctValue: boolean;
@@ -60,6 +66,8 @@ const emptyState = (): RelationState => ({
   havingClauses: [],
   selectValues: [],
   joinValues: [],
+  preloadValues: [],
+  joinAssociations: [],
   limitValue: null,
   offsetValue: null,
   distinctValue: false,
@@ -74,6 +82,8 @@ const cloneState = (state: RelationState): RelationState => ({
   havingClauses: [...state.havingClauses],
   selectValues: [...state.selectValues],
   joinValues: [...state.joinValues],
+  preloadValues: [...state.preloadValues],
+  joinAssociations: [...state.joinAssociations],
   limitValue: state.limitValue,
   offsetValue: state.offsetValue,
   distinctValue: state.distinctValue,
@@ -168,6 +178,33 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return this.chain((s) => {
       s.noneValue = true;
     });
+  }
+
+  /**
+   * Eager-load one or more associations. After materialization, each
+   * loaded record has the named associations populated in its cache —
+   * subsequent `record.user` / `record.posts` reads don't re-query.
+   *
+   * Mirrors Rails' `Model.includes(...)`. For now we always preload via
+   * separate batched IN queries; we don't analyze `where` for a JOIN-vs-
+   * preload heuristic.
+   */
+  includes(...names: string[]): Relation<T> {
+    return this.chain((s) => s.preloadValues.push(...names));
+  }
+
+  /** Alias for `includes` — always preloads via separate queries. */
+  preload(...names: string[]): Relation<T> {
+    return this.includes(...names);
+  }
+
+  /**
+   * INNER JOIN one or more associations. Lets you `.where` on columns of
+   * the joined table via raw SQL (no aliasing magic). Doesn't preload —
+   * use `includes` for that.
+   */
+  joins(...names: string[]): Relation<T> {
+    return this.chain((s) => s.joinAssociations.push(...names));
   }
 
   /**
@@ -267,6 +304,13 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     } else {
       manager.project(this.table.attribute(Arel.star));
     }
+    // INNER JOINs from `joins('user', 'comments')` etc. — render as raw
+    // SQL fragments. Each association name resolves through the registry
+    // to a reflection that knows the FK/PK columns to bind.
+    for (const assocName of this.state.joinAssociations) {
+      const fragment = this.joinFragmentFor(assocName);
+      if (fragment) manager.join(Arel.sql(fragment));
+    }
     for (const clause of this.state.whereClauses) manager.where(clause);
     for (const clause of this.state.havingClauses) manager.having(clause);
     if (this.state.groupValues.length > 0) manager.group(...this.state.groupValues);
@@ -278,12 +322,29 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return manager;
   }
 
+  /** Resolve an association name into an `INNER JOIN ... ON ...` SQL fragment. */
+  private joinFragmentFor(name: string): string | null {
+    const reflection = lookupAssociation(this.klass, name);
+    if (!reflection) throw new Error(`Unknown association "${name}" on ${this.klass.name}`);
+    if (reflection.kind === 'belongs_to') {
+      const target = (reflection.classRef!() as unknown) as { effectiveTableName(): string };
+      const targetTable = target.effectiveTableName();
+      const own = ((this.klass as unknown) as { effectiveTableName(): string }).effectiveTableName();
+      return `INNER JOIN "${targetTable}" ON "${targetTable}"."${reflection.primaryKey}" = "${own}"."${reflection.foreignKey}"`;
+    }
+    // has_many / has_one — FK on the owned side
+    const target = (reflection.classRef!() as unknown) as { effectiveTableName(): string };
+    const targetTable = target.effectiveTableName();
+    const own = ((this.klass as unknown) as { effectiveTableName(): string }).effectiveTableName();
+    return `INNER JOIN "${targetTable}" ON "${targetTable}"."${reflection.foreignKey}" = "${own}"."${reflection.primaryKey}"`;
+  }
+
   /** Render to `[sql, binds]` against the model's adapter. */
   toSql(): [string, unknown[]] {
     return this.klass.connection().toSql(this.buildArel());
   }
 
-  /** Materialize the relation, hydrating model instances. */
+  /** Materialize the relation, hydrating model instances and running preloads. */
   async toArray(): Promise<T[]> {
     if (this.loaded) return this.loaded;
     if (this.state.noneValue) {
@@ -293,6 +354,11 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     const [sql, binds] = this.toSql();
     const rows = await this.klass.connection().execute(sql, binds);
     this.loaded = rows.map((row) => this.klass.instantiate(row));
+    if (this.state.preloadValues.length > 0 && this.loaded.length > 0) {
+      for (const name of this.state.preloadValues) {
+        await preloadAssociation(this.loaded, name);
+      }
+    }
     return this.loaded;
   }
 

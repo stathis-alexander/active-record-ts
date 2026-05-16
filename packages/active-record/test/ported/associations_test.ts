@@ -220,3 +220,102 @@ describe('Associations — polymorphic belongs_to / has_many { as }', () => {
     expect(fNotes.length).toBe(1);
   });
 });
+
+describe('Associations — includes / preload (eager loading)', () => {
+  class Writer2 extends Author {}
+  class Article3 extends Post {}
+  Article3.belongsTo('author', { class: () => Writer2, foreignKey: 'author_id' });
+  Writer2.hasMany('articles', { class: () => Article3, foreignKey: 'author_id' });
+
+  beforeEach(async () => {
+    await fx.reset();
+    Writer2.useConnection(fx.adapter);
+    Article3.useConnection(fx.adapter);
+    await Writer2.loadSchema();
+    await Article3.loadSchema();
+  });
+
+  test('includes("author") populates each article cache in one query', async () => {
+    const w = await Writer2.create({ name: 'A' });
+    await Article3.create({ title: 'p1', author_id: w.id as number });
+    await Article3.create({ title: 'p2', author_id: w.id as number });
+
+    let executes = 0;
+    const original = fx.adapter.execute.bind(fx.adapter);
+    fx.adapter.execute = async (sql, binds) => {
+      executes++;
+      return original(sql, binds);
+    };
+    try {
+      const articles = await Article3.includes('author');
+      // One SELECT for the articles, plus one batched SELECT for authors → 2.
+      expect(executes).toBe(2);
+      // Each article's `.author` should hit the cache (no further queries).
+      const before = executes;
+      for (const a of articles) {
+        const author = await (a as unknown as { author: Promise<Writer2 | null> }).author;
+        expect(author?.readAttribute('name')).toBe('A');
+      }
+      expect(executes).toBe(before);
+    } finally {
+      fx.adapter.execute = original;
+    }
+  });
+
+  test('includes("articles") populates each writer cache for has_many', async () => {
+    const w = await Writer2.create({ name: 'B' });
+    await Article3.create({ title: 'a', author_id: w.id as number });
+    await Article3.create({ title: 'b', author_id: w.id as number });
+
+    const writers = await Writer2.includes('articles');
+    let executes = 0;
+    const original = fx.adapter.execute.bind(fx.adapter);
+    fx.adapter.execute = async (sql, binds) => {
+      executes++;
+      return original(sql, binds);
+    };
+    try {
+      for (const writer of writers) {
+        const arts = await (writer as unknown as { articles: Promise<Article3[]> }).articles;
+        expect(arts.length).toBe(2);
+      }
+      expect(executes).toBe(0);
+    } finally {
+      fx.adapter.execute = original;
+    }
+  });
+
+  test('preload is an alias for includes', async () => {
+    const w = await Writer2.create({ name: 'C' });
+    await Article3.create({ title: 'x', author_id: w.id as number });
+    const writers = await Writer2.all().preload('articles');
+    const arts = await (writers[0] as unknown as { articles: Promise<Article3[]> }).articles;
+    expect(arts.length).toBe(1);
+  });
+
+  test.skip('nested includes ("author.articles") (TODO: nested preload paths)', () => {});
+});
+
+describe('Associations — joins via association name', () => {
+  class Writer3 extends Author {}
+  class Article4 extends Post {}
+  Article4.belongsTo('author', { class: () => Writer3, foreignKey: 'author_id' });
+
+  beforeEach(async () => {
+    await fx.reset();
+    Writer3.useConnection(fx.adapter);
+    Article4.useConnection(fx.adapter);
+    await Writer3.loadSchema();
+    await Article4.loadSchema();
+  });
+
+  test('joins("author") emits INNER JOIN and lets you filter on joined columns', async () => {
+    const alice = await Writer3.create({ name: 'Alice' });
+    const bob = await Writer3.create({ name: 'Bob' });
+    await Article4.create({ title: 'a', author_id: alice.id as number });
+    await Article4.create({ title: 'b', author_id: bob.id as number });
+    const aliceArticles = await Article4.joins('author').where(['"authors"."name" = ?', 'Alice']);
+    expect(aliceArticles.length).toBe(1);
+    expect(aliceArticles[0]?.readAttribute('title')).toBe('a');
+  });
+});

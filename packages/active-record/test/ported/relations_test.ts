@@ -128,12 +128,12 @@ describe('Relations — chainable', () => {
   test.skip('group + having (TODO: group/having combinations)', () => {});
   test.skip('scope_for_create / new from scope (TODO: scope)', () => {});
 
-  test.skip('joins inner (TODO: joins / associations)', () => {});
-  test.skip('left_outer_joins (TODO: joins)', () => {});
-  test.skip('includes for eager-load (TODO: eager load)', () => {});
-  test.skip('preload (TODO: associations)', () => {});
-  test.skip('references (TODO: associations)', () => {});
-  test.skip('eager_load explicit (TODO: eager load)', () => {});
+  // joins / includes / preload covered in associations_test.ts now that the
+  // surface exists — these slot-level skips remain for the more nuanced
+  // variants we haven't implemented yet.
+  test.skip('left_outer_joins (TODO: LEFT OUTER variant)', () => {});
+  test.skip('references (TODO: references for STI-aware joins)', () => {});
+  test.skip('eager_load explicit (TODO: forces LEFT OUTER JOIN even when preloadable)', () => {});
 
   test.skip('lock(:for_update) (TODO: locking SQL)', () => {});
   test.skip('readonly (TODO: readonly relation)', () => {});

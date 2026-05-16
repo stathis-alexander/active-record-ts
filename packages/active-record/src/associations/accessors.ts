@@ -14,6 +14,29 @@ import { Relation } from '../Relation';
 import type { Base, BaseConstructor } from '../Base';
 import type { AssociationReflection } from './types';
 
+/** Symbol marker for the per-instance association cache populated by Preloader. */
+export const ASSOCIATION_CACHE = Symbol.for('@arelts/active-record:associationCache');
+
+type AssociationCache = Map<string, Base | Base[] | null>;
+
+/** Read the association cache off a record, creating it on demand. */
+export const getAssociationCache = (record: Base): AssociationCache => {
+  // biome-ignore lint/suspicious/noExplicitAny: cache lives on the instance
+  const r = record as any;
+  if (!r[ASSOCIATION_CACHE]) r[ASSOCIATION_CACHE] = new Map<string, Base | Base[] | null>();
+  return r[ASSOCIATION_CACHE] as AssociationCache;
+};
+
+/** Plant a preloaded value into the association cache for `record`. */
+export const setCachedAssociation = (record: Base, name: string, value: Base | Base[] | null): void => {
+  getAssociationCache(record).set(name, value);
+};
+
+/** True when `record` has a preloaded value for `name`. */
+export const hasCachedAssociation = (record: Base, name: string): boolean => {
+  return getAssociationCache(record).has(name);
+};
+
 /** Module-level registry of resolvable polymorphic class names. Populated by Base.polymorphicAs. */
 const POLYMORPHIC_REGISTRY = new Map<string, BaseConstructor>();
 
@@ -35,6 +58,9 @@ export const defineAssociationAccessor = (ctor: typeof Base, reflection: Associa
       configurable: true,
       enumerable: false,
       get(this: Base) {
+        // Cache check: if a Preloader populated us, return the cached value.
+        const cache = getAssociationCache(this);
+        if (cache.has(name)) return Promise.resolve(cache.get(name) as Base | null);
         return readBelongsTo(this, reflection);
       },
     });
@@ -46,18 +72,41 @@ export const defineAssociationAccessor = (ctor: typeof Base, reflection: Associa
       configurable: true,
       enumerable: false,
       get(this: Base) {
+        const cache = getAssociationCache(this);
+        if (cache.has(name)) return Promise.resolve(cache.get(name) as Base | null);
         return readHasOne(this, reflection);
       },
     });
     return;
   }
 
-  // has_many — returns a Relation, which is chainable AND thenable.
+  // has_many — returns a Relation, which is chainable AND thenable. When
+  // preloaded, we wrap the cached array in a tiny thenable that still
+  // exposes the most-common chain methods (where/order/limit) so callers
+  // who chain after a preload get expected behavior — chains issue a
+  // fresh query rather than filtering the cached array.
   Object.defineProperty(ctor.prototype, name, {
     configurable: true,
     enumerable: false,
     get(this: Base) {
-      return buildHasManyRelation(this, reflection);
+      const cache = getAssociationCache(this);
+      const fresh = buildHasManyRelation(this, reflection);
+      if (cache.has(name)) {
+        const cached = (cache.get(name) as Base[]) ?? [];
+        // biome-ignore lint/suspicious/noExplicitAny: lightweight proxy
+        const r = fresh as any;
+        const originalThen = r.then.bind(r);
+        r.then = (onF: (v: unknown[]) => unknown, onR?: (e: unknown) => unknown) => {
+          try {
+            return Promise.resolve(onF(cached));
+          } catch (e) {
+            return onR ? Promise.resolve(onR(e)) : Promise.reject(e);
+          }
+        };
+        r.toArray = async () => cached;
+        return fresh;
+      }
+      return fresh;
     },
   });
 };
