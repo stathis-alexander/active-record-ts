@@ -16,6 +16,7 @@ import {
   AcceptanceValidator,
   type AcceptanceOptions,
   AbsenceValidator,
+  BlockValidator,
   ConfirmationValidator,
   type ConfirmationOptions,
   ExclusionValidator,
@@ -250,6 +251,41 @@ export class Model {
     return this;
   }
 
+  /**
+   * Register a free-form block validator — `Klass.validate((record, errors) => ...)`.
+   * The function may be async and receives the same `(record, errors, context)`
+   * arguments every built-in validator does.
+   */
+  static validate<This extends typeof Model>(
+    this: This,
+    fn: (record: InstanceType<This>, errors: Errors, context?: ValidationContext) => void | Promise<void>,
+    options: ValidatorOptions<InstanceType<This>> = {},
+  ): This {
+    return this.validatesWith(new BlockValidator(fn, options));
+  }
+
+  /** All registered validators in declaration order (inherited + own). */
+  static validators<This extends typeof Model>(this: This): ReadonlyArray<Validator<InstanceType<This>>> {
+    return getRegistry(this).validators as unknown as ReadonlyArray<Validator<InstanceType<This>>>;
+  }
+
+  /** Validators that target any of the given attribute names. */
+  static validatorsOn<This extends typeof Model>(this: This, ...attributes: string[]): ReadonlyArray<Validator<InstanceType<This>>> {
+    const wanted = new Set(attributes);
+    return this.validators().filter((v) => {
+      const attrs = (v as unknown as { attributes?: readonly string[] }).attributes;
+      if (!attrs) return false;
+      for (const a of attrs) if (wanted.has(a)) return true;
+      return false;
+    });
+  }
+
+  /** Reset all per-class validators. Rails' `clear_validators!`. */
+  static clearValidators<This extends typeof Model>(this: This): This {
+    getRegistry(this).validators.length = 0;
+    return this;
+  }
+
   /** Add a presence validator. */
   static validatesPresenceOf<This extends typeof Model>(this: This, attribute: string, options: ValidatorOptions<InstanceType<This>> = {}): This {
     return this.validatesWith(new PresenceValidator(attribute, options));
@@ -363,6 +399,28 @@ export class Model {
   }
   static afterDestroy<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
     return this.setCallback('destroy', 'after', fn);
+  }
+
+  /**
+   * Run `fn` after the outermost transaction surrounding this record's
+   * save / destroy commits. When the record is touched outside a
+   * transaction, the callback fires immediately after the save.
+   */
+  static afterCommit<This extends typeof Model>(
+    this: This,
+    fn: CallbackFn<InstanceType<This>>,
+    options?: { on?: 'create' | 'update' | 'destroy' | Array<'create' | 'update' | 'destroy'> },
+  ): This {
+    return this.setCallback('commit', 'after', fn, options as never);
+  }
+
+  /** Run `fn` when the surrounding transaction rolls back. */
+  static afterRollback<This extends typeof Model>(
+    this: This,
+    fn: CallbackFn<InstanceType<This>>,
+    options?: { on?: 'create' | 'update' | 'destroy' | Array<'create' | 'update' | 'destroy'> },
+  ): This {
+    return this.setCallback('rollback', 'after', fn, options as never);
   }
 
   /** Run a registered callback chain — typically used by ActiveRecord persistence. */

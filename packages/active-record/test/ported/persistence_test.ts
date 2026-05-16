@@ -124,8 +124,32 @@ describe('Persistence — create / save / update / destroy', () => {
   test.skip('update_many with array of records (TODO)', () => {});
   test.skip('class-level update without ids (TODO)', () => {});
   test.skip('class-level update is affected by scoping (TODO: scoping)', () => {});
-  test.skip('destroy_many / destroy_many_with_invalid_id (TODO: destroy by ids)', () => {});
-  test.skip('delete_many (TODO: delete by ids)', () => {});
+  test('destroy([ids]) instantiates each and calls destroy()', async () => {
+    const a = await Topic.create({ title: 'a' });
+    const b = await Topic.create({ title: 'b' });
+    const destroyed = (await Topic.destroy([a.id, b.id])) as Topic[];
+    expect(destroyed.length).toBe(2);
+    expect(destroyed.every((r) => r.destroyed)).toBe(true);
+    expect(await Topic.count()).toBe(0);
+  });
+
+  test('destroy(id) returns the single record', async () => {
+    const a = await Topic.create({ title: 'a' });
+    const r = await Topic.destroy(a.id) as Topic;
+    expect(r.destroyed).toBe(true);
+  });
+
+  test('destroy([id]) raises when an id is missing', async () => {
+    await expect(Topic.destroy([999])).rejects.toThrow();
+  });
+
+  test('delete([ids]) bypasses callbacks and just emits DELETE', async () => {
+    const a = await Topic.create({ title: 'a' });
+    const b = await Topic.create({ title: 'b' });
+    const n = await Topic.delete([a.id, b.id]);
+    expect(n).toBe(2);
+    expect(await Topic.count()).toBe(0);
+  });
 
   test('increment attribute', async () => {
     const t = await Topic.create({ title: 'a', replies_count: 5 });

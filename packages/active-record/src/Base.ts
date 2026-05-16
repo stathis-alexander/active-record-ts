@@ -22,7 +22,7 @@
 
 import { Arel, Nodes as ArelNodes } from '@arelts/arel';
 import type { Attribute as ArelAttribute, BindParamNode } from '@arelts/arel';
-import { Model, lookupType, tableize, type Type } from '@arelts/active-model';
+import { Model, lookupType, tableize, type Type, type TypeRef } from '@arelts/active-model';
 import type { ConnectionAdapter } from './ConnectionAdapter';
 import { getConnection, setConnection } from './connection';
 import { buildAdapter } from './adapters';
@@ -91,6 +91,67 @@ const normalizeColumnDefault = (raw: unknown, type: Type): unknown => {
     return type.cast(unquoted);
   }
   return type.cast(raw);
+};
+
+/** Camelize a snake_case attribute name for method naming (`first_name` -> `FirstName`). */
+const camelizeMethodSuffix = (name: string): string =>
+  name.replace(/(?:^|[_-])([a-z0-9])/gi, (_, c: string) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g, '');
+
+/**
+ * Install dynamic finder methods on the model constructor:
+ * `User.findByName(value)` resolves to `User.findBy({ name: value })`, and
+ * `findByNameOrThrow(value)` throws `RecordNotFound` when nothing matches.
+ */
+const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
+  const suffix = camelizeMethodSuffix(attribute);
+  const findName = `findBy${suffix}`;
+  const findNameOrThrow = `${findName}OrThrow`;
+  if (!Object.prototype.hasOwnProperty.call(ctor, findName)) {
+    Object.defineProperty(ctor, findName, {
+      configurable: true,
+      writable: true,
+      value: async function (this: typeof Base, value: unknown) {
+        return this.findBy({ [attribute]: value } as never);
+      },
+    });
+  }
+  if (!Object.prototype.hasOwnProperty.call(ctor, findNameOrThrow)) {
+    Object.defineProperty(ctor, findNameOrThrow, {
+      configurable: true,
+      writable: true,
+      value: async function (this: typeof Base, value: unknown) {
+        const record = await this.findBy({ [attribute]: value } as never);
+        if (!record) {
+          throw new RecordNotFound(`Couldn't find ${this.name} with ${attribute}=${String(value)}`);
+        }
+        return record;
+      },
+    });
+  }
+};
+
+/**
+ * Stack of pending transaction queues. Each entry collects callbacks
+ * registered by records that were saved/destroyed inside that
+ * transaction. The top of the stack is the innermost transaction; when
+ * the OUTERMOST transaction commits we run its commit callbacks. When
+ * any transaction rolls back we discard its commit callbacks and run
+ * the rollback ones instead.
+ */
+type TxQueue = { onCommit: Array<() => Promise<void> | void>; onRollback: Array<() => Promise<void> | void> };
+const transactionStack: TxQueue[] = [];
+
+const enqueueOnCommit = (fn: () => Promise<void> | void): void => {
+  // Callers must check `transactionStack.length` themselves when they need
+  // the no-tx fast path (so they can await directly). This helper only
+  // enqueues onto an open transaction.
+  if (transactionStack.length === 0) return;
+  transactionStack[transactionStack.length - 1]!.onCommit.push(fn);
+};
+
+const enqueueOnRollback = (fn: () => Promise<void> | void): void => {
+  if (transactionStack.length === 0) return;
+  transactionStack[transactionStack.length - 1]!.onRollback.push(fn);
 };
 
 /** Symbol key for cached per-class state attached to constructors. */
@@ -223,6 +284,22 @@ export class Base extends Model {
     getState(this).schemaLoaded = true;
   }
 
+  /**
+   * Override Model.attribute so dynamic finders are auto-generated alongside
+   * the attribute accessor. Users who call `User.attribute('name', 'string')`
+   * directly get `User.findByName(...)` for free.
+   */
+  static override attribute<This extends typeof Model>(
+    this: This,
+    name: string,
+    type: TypeRef,
+    options?: { default?: unknown },
+  ): This {
+    const result = (Model.attribute as (this: This, name: string, type: TypeRef, options?: { default?: unknown }) => This).call(this, name, type, options);
+    defineDynamicFinders(this as unknown as typeof Base, name);
+    return result;
+  }
+
   /** Register a single column as an attribute (used by loadSchema and tests). */
   static attributeFromColumn(col: ColumnInfo): void {
     let type: Type;
@@ -237,6 +314,7 @@ export class Base extends Model {
     } else {
       this.attribute(col.name, type, { default: defaultValue });
     }
+    defineDynamicFinders(this, col.name);
   }
 
   /** Instantiate a record from a database row, skipping dirty tracking. */
@@ -480,8 +558,58 @@ export class Base extends Model {
     return records;
   }
 
+  /**
+   * Find records by primary-key list, then call `destroy()` on each (so
+   * callbacks fire). Mirrors Rails' `Model.destroy([1, 2, 3])`. Returns
+   * the destroyed records. Raises `RecordNotFound` if any id is missing.
+   */
+  static async destroy<This extends typeof Base>(
+    this: This,
+    ids: unknown | readonly unknown[],
+  ): Promise<InstanceType<This> | InstanceType<This>[]> {
+    const list = Array.isArray(ids) ? (ids as readonly unknown[]) : [ids];
+    const records = await (this as unknown as typeof Base).find(list as readonly unknown[]) as InstanceType<This>[];
+    for (const r of records) await r.destroy();
+    return Array.isArray(ids) ? records : records[0]!;
+  }
+
+  /**
+   * Issue a single DELETE for the given primary-key list. Skips callbacks
+   * and validations — mirrors Rails' `Model.delete([1, 2, 3])`. Returns
+   * the number of rows affected.
+   */
+  static async delete<This extends typeof Base>(
+    this: This,
+    ids: unknown | readonly unknown[],
+  ): Promise<number> {
+    const list = Array.isArray(ids) ? (ids as readonly unknown[]) : [ids];
+    return (this as unknown as typeof Base).deleteAll({ [this.primaryKey]: list } as never);
+  }
+
   static async transaction<T>(this: typeof Base, fn: (tx: ConnectionAdapter) => Promise<T>): Promise<T> {
-    return this.connection().transaction(async (adapter) => fn(adapter));
+    const queue: TxQueue = { onCommit: [], onRollback: [] };
+    transactionStack.push(queue);
+    try {
+      const result = await this.connection().transaction(async (adapter) => fn(adapter));
+      // Move our commit callbacks to the parent queue (if any) so they fire
+      // only once the OUTERMOST transaction commits. If we're the outermost,
+      // run them now.
+      transactionStack.pop();
+      if (transactionStack.length > 0) {
+        const parent = transactionStack[transactionStack.length - 1]!;
+        parent.onCommit.push(...queue.onCommit);
+        parent.onRollback.push(...queue.onRollback);
+      } else {
+        for (const cb of queue.onCommit) await cb();
+      }
+      return result;
+    } catch (err) {
+      transactionStack.pop();
+      for (const cb of queue.onRollback) {
+        try { await cb(); } catch { /* swallow secondary errors */ }
+      }
+      throw err;
+    }
   }
 
   // ──────────────────────────── instance persistence ────────────────────────────
@@ -492,14 +620,16 @@ export class Base extends Model {
    */
   async save(): Promise<boolean> {
     const ctor = this.constructor as typeof Base;
-    if (!(await this.validate(this.newRecord ? 'create' : 'update'))) return false;
+    const wasNew = this.newRecord;
+    if (!(await this.validate(wasNew ? 'create' : 'update'))) return false;
     let inner = false;
     const outer = await ctor.runCallbacks('save', this, async () => {
-      inner = await ctor.runCallbacks(this.newRecord ? 'create' : 'update', this, async () => {
-        if (this.newRecord) await this.insertRecord();
+      inner = await ctor.runCallbacks(wasNew ? 'create' : 'update', this, async () => {
+        if (wasNew) await this.insertRecord();
         else await this.updateRecord();
       });
     });
+    if (outer && inner) await this.queueTransactionalCallbacks(wasNew ? 'create' : 'update');
     return outer && inner;
   }
 
@@ -534,7 +664,40 @@ export class Base extends Model {
       }
       this._destroyed = true;
     });
+    await this.queueTransactionalCallbacks('destroy');
     return this;
+  }
+
+  /**
+   * Reload this record from the database holding a row lock. Mirrors
+   * Rails' `record.lock!`. Must be invoked inside a transaction — the
+   * lock is held until the transaction commits or rolls back.
+   */
+  async lockOrThrow(lockClause: string | true = true): Promise<this> {
+    const ctor = this.constructor as typeof Base;
+    if (ctor.connection() == null) throw new Error('No connection established');
+    const id = this.readAttribute(ctor.primaryKey);
+    if (id == null) throw new RecordNotFound(`Cannot lock an unsaved ${ctor.name}`);
+    const row = await new Relation(ctor as unknown as BaseConstructor<this>)
+      .where({ [ctor.primaryKey]: id } as never)
+      .lock(lockClause)
+      .take();
+    if (!row) throw new RecordNotFound(`Couldn't find ${ctor.name} with ${ctor.primaryKey}=${String(id)}`);
+    // biome-ignore lint/suspicious/noExplicitAny: protected hydrate
+    (this as any)._attributes.hydrate((row as Base).attributes());
+    return this;
+  }
+
+  /**
+   * Reload this record under a row-level lock inside a fresh transaction,
+   * yield to `fn`, then commit. Mirrors Rails' `record.with_lock { ... }`.
+   */
+  async withLock<R>(fn: (record: this) => Promise<R>, lockClause: string | true = true): Promise<R> {
+    const ctor = this.constructor as typeof Base;
+    return ctor.transaction(async () => {
+      await this.lockOrThrow(lockClause);
+      return fn(this);
+    });
   }
 
   /** Re-read from the DB, replacing any in-memory changes. */
@@ -667,6 +830,26 @@ export class Base extends Model {
     await conn.exec(sql, binds);
     // biome-ignore lint/suspicious/noExplicitAny: protected field
     (this as any)._attributes.commit();
+  }
+
+  /**
+   * Push this record's `after_commit` / `after_rollback` callbacks onto
+   * the active transaction queue (or run `after_commit` immediately when
+   * not inside one). Filtering by `on: 'create' | 'update' | 'destroy'`
+   * is applied at fire time via the callback chain's context filter.
+   */
+  private async queueTransactionalCallbacks(context: 'create' | 'update' | 'destroy'): Promise<void> {
+    const ctor = this.constructor as typeof Base;
+    if (transactionStack.length === 0) {
+      await ctor.runCallbacks('commit', this, async () => { /* no-op body */ }, context);
+      return;
+    }
+    enqueueOnCommit(async () => {
+      await ctor.runCallbacks('commit', this, async () => { /* no-op body */ }, context);
+    });
+    enqueueOnRollback(async () => {
+      await ctor.runCallbacks('rollback', this, async () => { /* no-op body */ }, context);
+    });
   }
 
   /** Stamp created_at/updated_at if the schema has them. */
