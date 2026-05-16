@@ -5,8 +5,15 @@
 
 import type { Errors } from './Errors';
 
+/**
+ * Optional context name passed to `Model#validate(context)`. Mirrors Rails'
+ * `valid?(:create)`/`valid?(:update)` — validators with `on` matching the
+ * context (or with no `on` at all) are evaluated; others are skipped.
+ */
+export type ValidationContext = string;
+
 export interface Validator<T = unknown> {
-  validate(record: T, errors: Errors): void | Promise<void>;
+  validate(record: T, errors: Errors, context?: ValidationContext): void | Promise<void>;
 }
 
 type Reader<T> = (record: T) => unknown;
@@ -26,9 +33,18 @@ export type ValidatorOptions<T> = {
   unless?: (record: T) => boolean;
   allowNull?: boolean;
   allowBlank?: boolean;
+  /** Limit the validator to one or more validation contexts (e.g. `'create'`). */
+  on?: ValidationContext | ValidationContext[];
 };
 
-const shouldValidate = <T>(record: T, options: ValidatorOptions<T> = {}): boolean => {
+const shouldValidate = <T>(record: T, options: ValidatorOptions<T> = {}, context?: ValidationContext): boolean => {
+  if (options.on !== undefined) {
+    const wanted = Array.isArray(options.on) ? options.on : [options.on];
+    // If `on` is set but no context was supplied, skip — matches Rails behavior
+    // where context-bound validators only fire on save (which always supplies one).
+    if (context === undefined) return false;
+    if (!wanted.includes(context)) return false;
+  }
   if (options.if && !options.if(record)) return false;
   if (options.unless && options.unless(record)) return false;
   return true;
@@ -45,8 +61,8 @@ const reader = <T>(attribute: string): Reader<T> => (r: T) => (r as Record<strin
 
 export class PresenceValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: ValidatorOptions<T> = {}) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (blank(value)) {
       errors.add(this.attribute, this.options.message ?? "can't be blank", { type: 'presence' });
@@ -56,8 +72,8 @@ export class PresenceValidator<T> implements Validator<T> {
 
 export class AbsenceValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: ValidatorOptions<T> = {}) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (!blank(value)) {
       errors.add(this.attribute, this.options.message ?? 'must be blank', { type: 'absence' });
@@ -77,8 +93,8 @@ export type LengthOptions<T> = ValidatorOptions<T> & {
 
 export class LengthValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: LengthOptions<T> = {}) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     const len = lengthOf(value);
@@ -120,8 +136,8 @@ export type FormatOptions<T> = ValidatorOptions<T> & { with?: RegExp; without?: 
 
 export class FormatValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: FormatOptions<T>) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     const str = value == null ? '' : String(value);
@@ -138,8 +154,8 @@ export type InclusionOptions<T> = ValidatorOptions<T> & { in: readonly unknown[]
 
 export class InclusionValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: InclusionOptions<T>) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     if (!this.options.in.includes(value)) {
@@ -152,8 +168,8 @@ export type ExclusionOptions<T> = ValidatorOptions<T> & { in: readonly unknown[]
 
 export class ExclusionValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: ExclusionOptions<T>) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     if (this.options.in.includes(value)) {
@@ -175,8 +191,8 @@ export type NumericalityOptions<T> = ValidatorOptions<T> & {
 
 export class NumericalityValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: NumericalityOptions<T> = {}) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     const num = Number(value);
@@ -212,8 +228,8 @@ export type AcceptanceOptions<T> = ValidatorOptions<T> & { accept?: readonly unk
 
 export class AcceptanceValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: AcceptanceOptions<T> = {}) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const accept = this.options.accept ?? [true, '1', 1];
     const value = reader<T>(this.attribute)(record);
     if (!accept.includes(value)) {
@@ -226,8 +242,8 @@ export type ConfirmationOptions<T> = ValidatorOptions<T> & { caseSensitive?: boo
 
 export class ConfirmationValidator<T> implements Validator<T> {
   constructor(private readonly attribute: string, private readonly options: ConfirmationOptions<T> = {}) {}
-  validate(record: T, errors: Errors): void {
-    if (!shouldValidate(record, this.options)) return;
+  validate(record: T, errors: Errors, context?: ValidationContext): void {
+    if (!shouldValidate(record, this.options, context)) return;
     const value = reader<T>(this.attribute)(record);
     const confirmation = reader<T>(`${this.attribute}Confirmation`)(record);
     if (confirmation === undefined) return;

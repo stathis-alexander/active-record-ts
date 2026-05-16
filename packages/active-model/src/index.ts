@@ -30,6 +30,7 @@ export {
   type InclusionOptions,
   type LengthOptions,
   type NumericalityOptions,
+  type ValidationContext,
   type Validator,
   type ValidatorOptions,
 } from './Validator';

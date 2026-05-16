@@ -169,6 +169,12 @@ export class Attributes {
     this.previousChanges = previous;
   }
 
+  /** Drop all pending and recorded changes — used by `clearChangesInformation`. */
+  clearChanges(): void {
+    for (const [name, value] of this.current) this.original.set(name, value);
+    this.previousChanges = new Map();
+  }
+
   /** Revert all pending changes. */
   restore(): void {
     for (const name of this.changedAttributes()) {

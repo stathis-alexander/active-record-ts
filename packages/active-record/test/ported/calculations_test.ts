@@ -95,11 +95,27 @@ describe('Calculations — aggregates (sum/avg/min/max)', () => {
 });
 
 describe('Calculations — grouping', () => {
-  test.skip('count with group_by (TODO: groupCounts)', () => {});
-  test.skip('group on multiple columns (TODO)', () => {});
-  test.skip('group then count (TODO)', () => {});
-  test.skip('count_with_column_select (TODO)', () => {});
-  test.skip('count_with_distinct (TODO: count + distinct)', () => {});
+  test('count grouped by a column returns a Map<key, n>', async () => {
+    const result = await Developer.all().group('salary').count() as Map<unknown, number>;
+    expect(result.get(100000)).toBe(2);
+    expect(result.get(80000)).toBe(1);
+    expect(result.get(150000)).toBe(1);
+  });
+
+  test('sum grouped by a column', async () => {
+    const result = await Developer.all().group('salary').sum('salary') as Map<unknown, number>;
+    expect(result.get(100000)).toBe(200000);
+    expect(result.get(80000)).toBe(80000);
+  });
+
+  test('group + average', async () => {
+    const result = await Developer.all().group('salary').average('salary') as Map<unknown, number>;
+    expect(result.get(100000)).toBe(100000);
+  });
+
+  test.skip('group on multiple columns (TODO: composite group key shape)', () => {});
+
+  test.skip('count_with_distinct (TODO: count + distinct interaction)', () => {});
 });
 
 describe('Calculations — special', () => {
