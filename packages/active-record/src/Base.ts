@@ -357,14 +357,14 @@ export class Base extends Model {
   async save(): Promise<boolean> {
     const ctor = this.constructor as typeof Base;
     if (!(await this.validate())) return false;
-    let ran = true;
-    await ctor.runCallbacks('save', this, async () => {
-      ran = await ctor.runCallbacks(this.newRecord ? 'create' : 'update', this, async () => {
+    let inner = false;
+    const outer = await ctor.runCallbacks('save', this, async () => {
+      inner = await ctor.runCallbacks(this.newRecord ? 'create' : 'update', this, async () => {
         if (this.newRecord) await this.insertRecord();
         else await this.updateRecord();
       });
     });
-    return ran;
+    return outer && inner;
   }
 
   async saveOrThrow(): Promise<void> {
