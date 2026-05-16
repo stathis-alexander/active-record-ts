@@ -1,33 +1,27 @@
+import type { Expression, RelationLike } from '../types';
 import { hash } from '../utilities/hash';
 import { Nodes } from '.';
-import type { LeftType } from './Binary';
+import type { CommentNode } from './Comment';
+import type { JoinSourceNode } from './JoinSource';
 import { Node } from './Node';
-
-type RelationType = any;
-type SourceType = any | null;
-type ProjectionsType = any[];
-type WheresType = any[];
-type GroupsType = any[];
-type HavingsType = any[];
-type WindowsType = any[];
-type CommentType = any | null;
-type SetQuantifierType = any | null;
-type OptimizerHintsType = any | null;
+import type { DistinctNode } from './Terminal';
+import type { DistinctOnNode, OptimizerHintsNode } from './Unary';
+import type { NamedWindowNode } from './Window';
 
 export class SelectCoreNode extends Node {
-  public source: SourceType;
+  public source: JoinSourceNode;
 
-  public projections: ProjectionsType;
-  public wheres: WheresType;
-  public groups: GroupsType;
-  public havings: HavingsType;
-  public windows: WindowsType;
+  public projections: Expression[];
+  public wheres: Expression[];
+  public groups: Expression[];
+  public havings: Expression[];
+  public windows: NamedWindowNode[];
 
-  public comment: CommentType;
-  public setQuantifier: SetQuantifierType;
-  public optimizerHints: OptimizerHintsType;
+  public comment: CommentNode | null;
+  public setQuantifier: DistinctNode | DistinctOnNode | null;
+  public optimizerHints: OptimizerHintsNode | null;
 
-  constructor(relation?: RelationType) {
+  constructor(relation?: RelationLike) {
     super();
 
     this.source = new Nodes.JoinSource(relation);
@@ -43,19 +37,19 @@ export class SelectCoreNode extends Node {
     this.optimizerHints = null;
   }
 
-  get from() {
+  get from(): RelationLike | undefined | null {
     return this.source.left;
   }
 
-  set from(value: LeftType) {
+  set from(value: RelationLike | undefined | null) {
     this.source.left = value;
   }
 
-  get froms() {
+  get froms(): RelationLike | undefined | null {
     return this.from;
   }
 
-  set froms(value: LeftType) {
+  set froms(value: RelationLike | undefined | null) {
     this.from = value;
   }
 

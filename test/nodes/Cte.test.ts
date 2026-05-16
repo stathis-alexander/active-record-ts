@@ -4,15 +4,18 @@ import Arel from '../../src';
 describe('Cte', () => {
   describe('equality', () => {
     it('is equal with equal ivars', () => {
-      const cte1 = new Arel.Nodes.Cte('foo', 'bar', { materialized: true });
-      const cte2 = new Arel.Nodes.Cte('foo', 'bar', { materialized: true });
+      const bar1 = new Arel.Table('bar');
+      const bar2 = new Arel.Table('bar');
+      const cte1 = new Arel.Nodes.Cte('foo', bar1, { materialized: true });
+      const cte2 = new Arel.Nodes.Cte('foo', bar2, { materialized: true });
 
       expect(cte1.isEqual(cte2)).toBe(true);
     });
 
     it('is not equal with unequal ivars', () => {
-      const cte1 = new Arel.Nodes.Cte('foo', 'bar', { materialized: true });
-      const cte2 = new Arel.Nodes.Cte('foo', 'bar');
+      const bar = new Arel.Table('bar');
+      const cte1 = new Arel.Nodes.Cte('foo', bar, { materialized: true });
+      const cte2 = new Arel.Nodes.Cte('foo', bar);
 
       expect(cte1.isEqual(cte2)).toBe(false);
     });
@@ -20,7 +23,7 @@ describe('Cte', () => {
 
   describe('to_cte', () => {
     it('returns self', () => {
-      const cte = new Arel.Nodes.Cte('foo', 'bar');
+      const cte = new Arel.Nodes.Cte('foo', new Arel.Table('bar'));
 
       expect(cte.toCte()).toBe(cte);
     });
@@ -28,7 +31,7 @@ describe('Cte', () => {
 
   describe('to_table', () => {
     it("returns an Arel::Table using the Cte's name", () => {
-      const table = new Arel.Nodes.Cte('foo', 'bar').toTable();
+      const table = new Arel.Nodes.Cte('foo', new Arel.Table('bar')).toTable();
 
       expect(table).toBeInstanceOf(Arel.Table);
       expect(table.name).toBe('foo');

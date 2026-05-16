@@ -1,22 +1,21 @@
+import type { BindValue } from '../types';
 import { hash } from '../utilities/hash';
 import { isInfinity, isUnboundable } from '../utilities/nodes';
 import { Node } from './Node';
 
-type ValueType = any;
-
 export class BindParamNode extends Node {
-  public readonly value: ValueType;
+  public readonly value: BindValue | undefined;
 
-  constructor(value: ValueType) {
+  constructor(value?: BindValue) {
     super();
     this.value = value;
   }
 
   override hash = () => hash([this.constructor.name, this.value]);
   override isNull = () => this.value == null;
-  valueBeforeTypeCast = () => {
-    if ('valueBeforeTypeCast' in this.value) {
-      return this.value.valueBeforeTypeCast();
+  valueBeforeTypeCast = (): BindValue | undefined => {
+    if (this.value != null && typeof this.value === 'object' && 'valueBeforeTypeCast' in this.value) {
+      return (this.value as { valueBeforeTypeCast: () => BindValue }).valueBeforeTypeCast();
     }
     return this.value;
   };

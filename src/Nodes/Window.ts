@@ -1,3 +1,4 @@
+import type { Expression } from '../types';
 import { hash } from '../utilities/hash';
 import { Node } from './Node';
 import { SqlLiteralNode } from './SqlLiteral';
@@ -12,14 +13,12 @@ export class RangeNode extends UnaryNode {}
 export class PrecedingNode extends UnaryNode {}
 export class FollowingNode extends UnaryNode {}
 
-type OrdersType = any[];
-type PartitionsType = any[];
-type FramingType = any | null;
+type Framing = RowsNode | RangeNode | null;
 
 export class WindowNode extends Node {
-  public orders: OrdersType;
-  public partitions: PartitionsType;
-  public framing: FramingType;
+  public orders: Expression[];
+  public partitions: Expression[];
+  public framing: Framing;
 
   constructor() {
     super();
@@ -28,7 +27,7 @@ export class WindowNode extends Node {
     this.framing = null;
   }
 
-  order = (...orders: OrdersType) => {
+  order = (...orders: Expression[]) => {
     orders.forEach((order) => {
       if (typeof order === 'string') {
         this.orders.push(new SqlLiteralNode(order));
@@ -39,7 +38,7 @@ export class WindowNode extends Node {
     return this;
   };
 
-  partition = (...partitions: PartitionsType) => {
+  partition = (...partitions: Expression[]) => {
     partitions.forEach((partition) => {
       if (typeof partition === 'string') {
         this.partitions.push(new SqlLiteralNode(partition));
@@ -50,7 +49,7 @@ export class WindowNode extends Node {
     return this;
   };
 
-  frame = (expression: FramingType) => {
+  frame = <T extends Framing>(expression: T): T => {
     this.framing = expression;
     return expression;
   };

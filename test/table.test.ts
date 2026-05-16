@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import Arel from '../src';
+import Arel, { EmptyJoinError } from '../src';
 import type { Table } from '../src/types';
 
 describe('Table', () => {
@@ -63,6 +63,10 @@ describe('Table', () => {
       it('noops on null', () => {
         const mgr = relation.join(null);
         expect(mgr.toSql()).toBe('SELECT FROM "users"');
+      });
+
+      it('raises EmptyJoinError on empty', () => {
+        expect(() => relation.join('')).toThrow(EmptyJoinError);
       });
 
       it('takes a second argument for join type', () => {

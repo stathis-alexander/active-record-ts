@@ -252,6 +252,18 @@ export class Nodes {
     return Nodes._Average;
   }
 
+  static get Avg() {
+    return Nodes.Average;
+  }
+
+  static get NotEqual() {
+    return Nodes.Inequality;
+  }
+
+  static buildQuoted(value: any, attribute?: any) {
+    return require('../utilities/nodes').buildQuoted(value, attribute);
+  }
+
   static get Between() {
     if (!Nodes._Between) Nodes._Between = require('./Binary').BetweenNode;
     return Nodes._Between;

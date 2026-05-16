@@ -41,4 +41,31 @@ describe('DeleteManager', () => {
       expect(dm.where(table.attribute('id').equal(10))).toBe(dm);
     });
   });
+
+  describe('returning', () => {
+    it('accepts a returning clause', () => {
+      const users = new Arel.Table('users');
+      const manager = new Arel.DeleteManager();
+      manager.from(users);
+      manager.returning(Arel.star);
+
+      expect(manager.toSql()).toContain('DELETE FROM "users" RETURNING *');
+    });
+
+    it('accepts multiple values as returning clause', () => {
+      const users = new Arel.Table('users');
+      const manager = new Arel.DeleteManager();
+      manager.from(users);
+      manager.returning(Arel.star);
+      manager.returning([users.attribute('id'), users.attribute('name')]);
+
+      expect(manager.toSql()).toContain('DELETE FROM "users" RETURNING *, "users"."id", "users"."name"');
+    });
+
+    it('chains', () => {
+      const manager = new Arel.DeleteManager();
+
+      expect(manager.returning(Arel.star)).toBe(manager);
+    });
+  });
 });

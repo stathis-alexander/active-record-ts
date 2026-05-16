@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { SqlLiteralNode } from '../../src';
 import Arel from '../../src';
 
 describe('BitwiseNot', () => {
@@ -13,7 +14,7 @@ describe('BitwiseNot', () => {
     const aliaz = operation.as('zomg');
     expect(aliaz).toBeInstanceOf(Arel.Nodes.As);
     expect(aliaz.left).toBe(operation);
-    expect(aliaz.right.isEqual('zomg')).toBe(true);
+    expect((aliaz.right as SqlLiteralNode).isEqual('zomg')).toBe(true);
   });
 
   it('operation ordering', () => {

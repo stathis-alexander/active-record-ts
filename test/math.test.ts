@@ -1,46 +1,56 @@
 import { describe, expect, it } from 'bun:test';
 import Arel from '../src';
+import type { Expression } from '../src/types';
 
-// This is a port of the Rails Arel tests to ensure that the ArelTS matches.
-// https://github.com/rails/rails/blob/main/activerecord/test/cases/arel/attributes/math_test.rb
+type MathDispatcher = {
+  add: (n: number) => Expression;
+  subtract: (n: number) => Expression;
+  multiply: (n: number) => Expression;
+  divide: (n: number) => Expression;
+  bitwiseAnd: (n: number) => Expression;
+  bitwiseOr: (n: number) => Expression;
+  bitwiseXor: (n: number) => Expression;
+  bitwiseShiftLeft: (n: number) => Expression;
+  bitwiseShiftRight: (n: number) => Expression;
+};
 
 describe('math', () => {
-  ['*', '/'].forEach((mathOperator) => {
-    const methodName = mathOperator === '*' ? 'multiply' : 'divide';
+  (['*', '/'] as const).forEach((mathOperator) => {
+    const methodName: keyof MathDispatcher = mathOperator === '*' ? 'multiply' : 'divide';
 
     it(`average should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').average()[methodName](2);
+      const expression = (table.attribute('id').average() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`AVG("users"."id") ${mathOperator} 2`);
     });
 
     it(`count should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').count()[methodName](2);
+      const expression = (table.attribute('id').count() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`COUNT("users"."id") ${mathOperator} 2`);
     });
 
     it(`maximum should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').maximum()[methodName](2);
+      const expression = (table.attribute('id').maximum() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`MAX("users"."id") ${mathOperator} 2`);
     });
 
     it(`minimum should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').minimum()[methodName](2);
+      const expression = (table.attribute('id').minimum() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`MIN("users"."id") ${mathOperator} 2`);
     });
 
     it(`attribute node should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id')[methodName](2);
+      const expression = (table.attribute('id') as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`"users"."id" ${mathOperator} 2`);
     });
   });
 
-  ['+', '-', '&', '|', '^', '<<', '>>'].forEach((mathOperator) => {
-    let methodName: string;
+  (['+', '-', '&', '|', '^', '<<', '>>'] as const).forEach((mathOperator) => {
+    let methodName: keyof MathDispatcher;
     switch (mathOperator) {
       case '+':
         methodName = 'add';
@@ -69,31 +79,31 @@ describe('math', () => {
 
     it(`average should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').average()[methodName](2);
+      const expression = (table.attribute('id').average() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`AVG("users"."id") ${mathOperator} 2`);
     });
 
     it(`count should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').count()[methodName](2);
+      const expression = (table.attribute('id').count() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`COUNT("users"."id") ${mathOperator} 2`);
     });
 
     it(`maximum should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').maximum()[methodName](2);
+      const expression = (table.attribute('id').maximum() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`MAX("users"."id") ${mathOperator} 2`);
     });
 
     it(`minimum should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id').minimum()[methodName](2);
+      const expression = (table.attribute('id').minimum() as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`MIN("users"."id") ${mathOperator} 2`);
     });
 
     it(`attribute node should be compatible with ${mathOperator}`, () => {
       const table = new Arel.Table('users');
-      const expression = table.attribute('id')[methodName](2);
+      const expression = (table.attribute('id') as unknown as MathDispatcher)[methodName](2);
       expect(table.project(expression).toSql()).toMatch(`"users"."id" ${mathOperator} 2`);
     });
   });

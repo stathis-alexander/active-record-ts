@@ -1,10 +1,12 @@
+import type { RelationLike } from '../types';
+import type { JoinNode } from './Binary';
 import { BinaryNode } from './Binary';
 
-type SingleSourceType = any;
-type JoinOperationType = any[];
-
 export class JoinSourceNode extends BinaryNode {
-  constructor(left: SingleSourceType, right: JoinOperationType = []) {
+  public declare left: RelationLike | undefined | null;
+  public declare right: JoinNode[];
+
+  constructor(left: RelationLike | undefined | null, right: JoinNode[] = []) {
     super(left, right);
   }
 

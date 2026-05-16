@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import Arel from '../src';
+import { expectInstance } from './_helpers';
 
 describe('UpdateManager', () => {
   it('should not quote sql literals', () => {
@@ -47,8 +48,7 @@ describe('UpdateManager', () => {
       updateManager.having('count(posts.id) >= 2');
 
       expect(updateManager.ast.groups.length).toBe(1);
-      const groupAst = updateManager.ast.groups[0];
-      expect(groupAst).toBeInstanceOf(Arel.Nodes.Group);
+      const groupAst = expectInstance(updateManager.ast.groups[0], Arel.Nodes.Group);
       expect(groupAst.expr).toBe('posts.id');
       expect(updateManager.ast.havings).toEqual(['count(posts.id) >= 2']);
     });
@@ -64,8 +64,7 @@ describe('UpdateManager', () => {
       updateManager.having('count(posts.id) >= 2');
 
       expect(updateManager.ast.groups.length).toBe(1);
-      const groupAst = updateManager.ast.groups[0];
-      expect(groupAst).toBeInstanceOf(Arel.Nodes.Group);
+      const groupAst = expectInstance(updateManager.ast.groups[0], Arel.Nodes.Group);
       expect(groupAst.expr).toBe('posts.id');
       expect(updateManager.ast.havings).toEqual(['count(posts.id) >= 2']);
     });
@@ -127,7 +126,8 @@ describe('UpdateManager', () => {
       const um = new Arel.UpdateManager();
 
       const table = new Arel.Table('users');
-      const joinSource = new Arel.Nodes.JoinSource(table, [new Arel.Nodes.InnerJoin(table, new Arel.Table('posts'))]);
+      // Rails: `table.create_join(Table.new(:posts))` returns InnerJoin(posts, nil).
+      const joinSource = new Arel.Nodes.JoinSource(table, [table.createJoin(new Arel.Table('posts'))]);
 
       um.table(joinSource);
       expect(um.toSql()).toContain('UPDATE "users" INNER JOIN "posts"');
@@ -166,6 +166,32 @@ describe('UpdateManager', () => {
 
     it('can be accessed', () => {
       expect(um.key).toBe('foo');
+    });
+  });
+
+  describe('returning', () => {
+    it('accepts a returning clause', () => {
+      const users = new Arel.Table('users');
+      const manager = new Arel.UpdateManager();
+      manager.table(users);
+      manager.returning(Arel.star);
+
+      expect(manager.toSql()).toContain('UPDATE "users" RETURNING *');
+    });
+
+    it('accepts multiple values as returning clause', () => {
+      const users = new Arel.Table('users');
+      const manager = new Arel.UpdateManager();
+      manager.table(users);
+      manager.returning(Arel.star);
+      manager.returning([users.attribute('id'), users.attribute('name')]);
+
+      expect(manager.toSql()).toContain('UPDATE "users" RETURNING *, "users"."id", "users"."name"');
+    });
+
+    it('chains', () => {
+      const manager = new Arel.UpdateManager();
+      expect(manager.returning(Arel.star)).toBe(manager);
     });
   });
 });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import Arel from '../src';
 import { FactoryMethods } from '../src/FactoryMethods';
+import type { AsNode } from '../src/types';
 
 class Factory extends FactoryMethods {}
 
@@ -61,7 +62,8 @@ describe('FactoryMethods', () => {
     const lower = factory.lower('one');
     expect(lower).toBeInstanceOf(Arel.Nodes.NamedFunction);
     expect(lower.name).toBe('LOWER');
-    expect(lower.expressions.map((e: any) => e.expr)).toEqual(['one']);
+    const exprs = lower.expressions as Array<{ expr: unknown }>;
+    expect(exprs.map((e) => e.expr)).toEqual(['one']);
   });
 
   it('test_coalesce', () => {
@@ -79,9 +81,9 @@ describe('FactoryMethods', () => {
     const cast = factory.cast(fieldNode, 'boolean');
     expect(cast).toBeInstanceOf(Arel.Nodes.NamedFunction);
     expect(cast.name).toBe('CAST');
-    const asNode = cast.expressions[0];
+    const [asNode] = cast.expressions as AsNode[];
     expect(asNode).toBeInstanceOf(Arel.Nodes.As);
-    expect(asNode.left).toBe(fieldNode);
-    expect(asNode.right).toBe('boolean');
+    expect(asNode?.left).toBe(fieldNode);
+    expect(asNode?.right).toBe('boolean');
   });
 });

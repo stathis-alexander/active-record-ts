@@ -1,18 +1,20 @@
 import type { Attribute } from '../Attribute';
 import { NodeExpression } from '../NodeExpression';
-import type { Scalar } from '../types';
 import { hash } from '../utilities/hash';
 import { isInfinity } from '../utilities/nodes';
 import { UnaryNode } from './Unary';
 
-type ValueType = Scalar;
-type AttributeType = Attribute;
-
+/**
+ * Wrapped value targeted at a specific column. `value` is typed as `unknown`
+ * because the visitor's `quoteValue` step can handle any runtime payload
+ * (primitive, Date, plain object → JSON, etc.) — restricting it to `Scalar`
+ * would force callers to launder values through casts.
+ */
 export class CastedNode extends NodeExpression {
-  public readonly value: ValueType;
-  public readonly attribute: AttributeType;
+  public readonly value: unknown;
+  public readonly attribute: Attribute;
 
-  constructor(value: ValueType, attribute: AttributeType) {
+  constructor(value: unknown, attribute: Attribute) {
     super();
     this.value = value;
     this.attribute = attribute;

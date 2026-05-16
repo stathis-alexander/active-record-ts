@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import Arel from '../src';
-import type { Attribute } from '../src/types';
+import type { InsertPair } from '../src/InsertManager';
+import type { Attribute, RelationLike } from '../src/types';
+import type { UpdatePair } from '../src/UpdateManager';
 
 class FakeEngine {
   public calls: unknown[] = [];
@@ -20,17 +22,17 @@ class FakeCrudder extends Arel.SelectManager {
   }
 
   // Mock CRUD methods for testing
-  compileInsert = (values: unknown[][]) => {
+  compileInsert = (values: InsertPair[]) => {
     const im = new Arel.InsertManager();
-    const table = this.ast.froms[0];
+    const table = this.ast.froms[0] as RelationLike;
     im.into(table);
-    im.values(values);
+    im.insert(values);
     return im;
   };
 
-  compileUpdate = (values: unknown[][], key: Attribute) => {
+  compileUpdate = (values: UpdatePair[], key: Attribute) => {
     const um = new Arel.UpdateManager();
-    um.table(this.ast.froms[0]);
+    um.table(this.ast.froms[0] as RelationLike);
     um.set(values);
     um.key = key.name;
     return um;
@@ -38,7 +40,7 @@ class FakeCrudder extends Arel.SelectManager {
 
   compileDelete = () => {
     const dm = new Arel.DeleteManager();
-    dm.from(this.ast.froms[0]);
+    dm.from(this.ast.froms[0] as RelationLike);
     return dm;
   };
 }

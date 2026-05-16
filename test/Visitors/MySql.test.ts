@@ -7,19 +7,16 @@ const Offset = Arel.Nodes.Offset;
 const Limit = Arel.Nodes.Limit;
 
 describe('Visitors.MySQL', () => {
-  let visitor: any;
-  let table: any;
+  let visitor: Arel.Visitors.MySQL;
+  let table: Arel.Table;
 
   beforeEach(() => {
-    // Note: MySQL visitor implementation would be needed
-    // visitor = new Arel.Visitors.MySQL();
+    visitor = new Arel.Visitors.MySQL();
     table = new Arel.Table('users');
   });
 
-  function compile(node: any): string {
-    // Note: This would need actual MySQL visitor implementation
-    // return visitor.accept(node, new Arel.Collectors.SqlString()).value;
-    return node.toString(); // Placeholder
+  function compile(node: unknown): string {
+    return visitor.accept(node, new Arel.Collectors.SqlString()).value();
   }
 
   describe('limits and offsets', () => {

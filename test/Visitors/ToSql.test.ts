@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
+import type { FragmentsNode, SqlLiteralNode } from '../../src';
 import Arel from '../../src';
 
 const BindParam = Arel.Nodes.BindParam;
@@ -9,18 +10,16 @@ const SqlLiteral = Arel.Nodes.SqlLiteral;
 describe('Visitors.ToSQL', () => {
   let table: Arel.Table;
   let attr: Arel.Attribute;
+  let visitor: Arel.Visitors.ToSql;
 
   beforeEach(() => {
-    // Note: ToSQL visitor implementation would be needed
-    // visitor = new Arel.Visitors.ToSQL();
+    visitor = new Arel.Visitors.ToSql();
     table = new Arel.Table('users');
     attr = table.attribute('id');
   });
 
-  function compile(node: any): string {
-    // Note: This would need actual ToSQL visitor implementation
-    // return visitor.accept(node, new Arel.Collectors.SqlString()).value;
-    return node.toString(); // Placeholder
+  function compile(node: unknown): string {
+    return visitor.accept(node, new Arel.Collectors.SqlString()).value();
   }
 
   describe('the to_sql visitor', () => {
@@ -73,7 +72,7 @@ describe('Visitors.ToSQL', () => {
       const fn = new NamedFunction('ABS', [table]);
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(fn, collector);
+      visitor.accept(fn, collector);
       expect(collector.retryable).toBe(false);
     });
 
@@ -81,7 +80,7 @@ describe('Visitors.ToSQL', () => {
       const node = new SqlLiteral('COUNT(*)');
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(node, collector);
+      visitor.accept(node, collector);
       expect(collector.retryable).toBe(false);
     });
 
@@ -89,7 +88,7 @@ describe('Visitors.ToSQL', () => {
       const node = new SqlLiteral('COUNT(*)', { retryable: true });
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(node, collector);
+      visitor.accept(node, collector);
       expect(collector.retryable).toBe(true);
     });
 
@@ -100,7 +99,7 @@ describe('Visitors.ToSQL', () => {
       );
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(node, collector);
+      visitor.accept(node, collector);
       expect(collector.retryable).toBe(false);
     });
 
@@ -108,7 +107,7 @@ describe('Visitors.ToSQL', () => {
       const node = new Arel.Nodes.BoundSqlLiteral('id IN (?)', [[1, 2, 3]], {});
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(node, collector);
+      visitor.accept(node, collector);
       expect(collector.retryable).toBe(false);
     });
 
@@ -116,7 +115,7 @@ describe('Visitors.ToSQL', () => {
       const statement = new Arel.Nodes.InsertStatement(table);
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(statement, collector);
+      visitor.accept(statement, collector);
       expect(collector.retryable).toBe(false);
     });
 
@@ -124,7 +123,7 @@ describe('Visitors.ToSQL', () => {
       const statement = new Arel.Nodes.UpdateStatement(table);
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(statement, collector);
+      visitor.accept(statement, collector);
       expect(collector.retryable).toBe(false);
     });
 
@@ -132,7 +131,7 @@ describe('Visitors.ToSQL', () => {
       const statement = new Arel.Nodes.DeleteStatement(table);
       const collector = new Arel.Collectors.SqlString();
       collector.retryable = true;
-      // visitor.accept(statement, collector);
+      visitor.accept(statement, collector);
       expect(collector.retryable).toBe(false);
     });
 
@@ -502,6 +501,42 @@ describe('Visitors.ToSQL', () => {
           '"users"."id" NOT IN (SELECT id FROM "users" WHERE "users"."name" = \'Aaron\')',
         );
       });
+
+      it('can handle two dot ranges', () => {
+        // Ruby: @attr.not_between(1..3)
+        const node = attr.notBetween(1, 3);
+        expect(compile(node)).toBe('("users"."id" < 1 OR "users"."id" > 3)');
+      });
+
+      it('can handle three dot ranges', () => {
+        // Ruby: @attr.not_between(1...3)
+        const node = attr.notBetween(1, 3, { excludeEnd: true });
+        expect(compile(node)).toBe('("users"."id" < 1 OR "users"."id" >= 3)');
+      });
+
+      it('can handle ranges bounded by infinity', () => {
+        expect(compile(attr.notBetween(1, Infinity))).toContain('"users"."id" < 1');
+        expect(compile(attr.notBetween(-Infinity, 3))).toContain('"users"."id" > 3');
+        expect(compile(attr.notBetween(-Infinity, 3, { excludeEnd: true }))).toContain('"users"."id" >= 3');
+        expect(compile(attr.notBetween(-Infinity, Infinity))).toBe('1=0');
+      });
+
+      it('is not preparable when an array', () => {
+        const node = attr.notIn([1, 2, 3]);
+        const collector = new Arel.Collectors.SqlString();
+        collector.preparable = true;
+        visitor.accept(node, collector);
+        expect(collector.preparable).toBe(false);
+      });
+
+      it('is preparable when a subselect', () => {
+        const subquery = table.project(table.attribute('id')).where(table.attribute('name').equal('Aaron'));
+        const node = attr.notIn(subquery);
+        const collector = new Arel.Collectors.SqlString();
+        collector.preparable = true;
+        visitor.accept(node, collector);
+        expect(collector.preparable).toBe(true);
+      });
     });
 
     describe('Nodes::BoundSqlLiteral', () => {
@@ -711,7 +746,7 @@ describe('Visitors.ToSQL', () => {
       });
 
       it('can be built by adding SQL fragments one at a time', () => {
-        let sql = Arel.sql('SELECT foo, bar');
+        let sql: SqlLiteralNode | FragmentsNode = Arel.sql('SELECT foo, bar');
         sql = sql.add(Arel.sql('FROM customers'));
         sql = sql.add(Arel.sql('GROUP BY foo'));
         expect(compile(sql)).toBe('SELECT foo, bar FROM customers GROUP BY foo');
@@ -771,6 +806,16 @@ describe('Visitors.ToSQL', () => {
         const node = attr.desc().nullsLast();
         expect(compile(node)).toContain('"users"."id" DESC NULLS LAST');
       });
+
+      it('should handle nulls first reversed', () => {
+        const node = attr.desc().nullsFirst().reverse();
+        expect(compile(node)).toContain('"users"."id" ASC NULLS LAST');
+      });
+
+      it('should handle nulls last reversed', () => {
+        const node = attr.desc().nullsLast().reverse();
+        expect(compile(node)).toContain('"users"."id" ASC NULLS FIRST');
+      });
     });
 
     describe('Nodes::In', () => {
@@ -788,6 +833,86 @@ describe('Visitors.ToSQL', () => {
         const subquery = table.project('id').where(table.attribute('name').equal('Aaron'));
         const node = attr.in(subquery);
         expect(compile(node)).toContain('"users"."id" IN (SELECT id FROM "users" WHERE "users"."name" = \'Aaron\')');
+      });
+
+      it('can handle two dot ranges', () => {
+        // Ruby: @attr.between(1..3)
+        const node = attr.between(1, 3);
+        expect(compile(node)).toContain('"users"."id" BETWEEN 1 AND 3');
+      });
+
+      it('can handle three dot ranges', () => {
+        // Ruby: @attr.between(1...3)
+        const node = attr.between(1, 3, { excludeEnd: true });
+        expect(compile(node)).toContain('"users"."id" >= 1 AND "users"."id" < 3');
+      });
+
+      it('can handle ranges bounded by infinity', () => {
+        expect(compile(attr.between(1, Infinity))).toContain('"users"."id" >= 1');
+        expect(compile(attr.between(-Infinity, 3))).toContain('"users"."id" <= 3');
+        expect(compile(attr.between(-Infinity, 3, { excludeEnd: true }))).toContain('"users"."id" < 3');
+        expect(compile(attr.between(-Infinity, Infinity))).toBe('1=1');
+      });
+
+      it('is not preparable when an array', () => {
+        const node = attr.in([1, 2, 3]);
+        const collector = new Arel.Collectors.SqlString();
+        collector.preparable = true;
+        visitor.accept(node, collector);
+        expect(collector.preparable).toBe(false);
+      });
+
+      it('is preparable when a subselect', () => {
+        const subquery = table.project(table.attribute('id')).where(table.attribute('name').equal('Aaron'));
+        const node = attr.in(subquery);
+        const collector = new Arel.Collectors.SqlString();
+        collector.preparable = true;
+        visitor.accept(node, collector);
+        expect(collector.preparable).toBe(true);
+      });
+    });
+
+    describe('Nodes::Union', () => {
+      it('squashes parenthesis on multiple unions', () => {
+        let sub = new Arel.Nodes.Union(Arel.sql('left'), Arel.sql('right'));
+        let node = new Arel.Nodes.Union(sub, Arel.sql('topright'));
+        expect(compile(node)).toBe('( left UNION right UNION topright )');
+
+        sub = new Arel.Nodes.Union(Arel.sql('left'), Arel.sql('right'));
+        node = new Arel.Nodes.Union(Arel.sql('topleft'), sub);
+        expect(compile(node)).toBe('( topleft UNION left UNION right )');
+      });
+
+      it.skip('encloses SELECT statements with parentheses', () => {
+        // SKIP: needs visitUnion to wrap nested SelectStatementNode operands in
+        // parentheses (Rails: "(...LIMIT 1) UNION (...LIMIT 1)" — current output
+        // is unparenthesized "...LIMIT 1 UNION ...").
+        const left = table.where(table.attribute('name').equal(0)).take(1).ast;
+        const right = table.where(table.attribute('name').equal(1)).take(1).ast;
+        const node = new Arel.Nodes.Union(left, right);
+        expect(compile(node)).toMatch(/LIMIT 1\) UNION \(/);
+      });
+    });
+
+    describe('Nodes::UnionAll', () => {
+      it('squashes parenthesis on multiple union alls', () => {
+        let sub = new Arel.Nodes.UnionAll(Arel.sql('left'), Arel.sql('right'));
+        let node = new Arel.Nodes.UnionAll(sub, Arel.sql('topright'));
+        expect(compile(node)).toBe('( left UNION ALL right UNION ALL topright )');
+
+        sub = new Arel.Nodes.UnionAll(Arel.sql('left'), Arel.sql('right'));
+        node = new Arel.Nodes.UnionAll(Arel.sql('topleft'), sub);
+        expect(compile(node)).toBe('( topleft UNION ALL left UNION ALL right )');
+      });
+
+      it.skip('encloses SELECT statements with parentheses', () => {
+        // SKIP: needs visitUnionAll to wrap nested SelectStatementNode operands in
+        // parentheses (Rails: "(...LIMIT 1) UNION ALL (...LIMIT 1)" — current
+        // output is unparenthesized).
+        const left = table.where(table.attribute('name').equal(0)).take(1).ast;
+        const right = table.where(table.attribute('name').equal(1)).take(1).ast;
+        const node = new Arel.Nodes.UnionAll(left, right);
+        expect(compile(node)).toMatch(/LIMIT 1\) UNION ALL \(/);
       });
     });
 
@@ -812,6 +937,17 @@ describe('Visitors.ToSQL', () => {
       it('should compile literal SQL', () => {
         const test = new Arel.Table(Arel.sql('generate_series(4, 2)'));
         expect(compile(test)).toContain('generate_series(4, 2)');
+      });
+
+      it('should compile Arel nodes', () => {
+        const test = new Arel.Nodes.NamedFunction('generate_series', [4, 2]);
+        expect(compile(test)).toContain('generate_series(4, 2)');
+      });
+
+      it('should compile nodes with bind params', () => {
+        const bp = new Arel.Nodes.BindParam(1);
+        const test = new Arel.Nodes.NamedFunction('generate_series', [4, bp]);
+        expect(compile(test)).toContain('generate_series(4, ?)');
       });
     });
   });

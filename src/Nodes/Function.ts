@@ -1,9 +1,10 @@
 import { FilterPredications } from '../FilterPredications';
 import { NodeExpression } from '../NodeExpression';
+import type { Expression } from '../types';
 import { hash } from '../utilities/hash';
 import { WindowPredications } from '../WindowPredications';
 
-export type ExpressionsType = any[] | any;
+export type ExpressionsType = Expression | Expression[];
 
 export class FunctionNode extends WindowPredications(FilterPredications(NodeExpression)) {
   public expressions: ExpressionsType;

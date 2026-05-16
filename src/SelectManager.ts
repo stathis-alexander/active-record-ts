@@ -1,24 +1,45 @@
+import { EmptyJoinError } from './errors';
 import { Nodes } from './Nodes';
-import type { JoinType } from './Nodes/types';
+import type { JoinNode } from './Nodes/Binary';
+import type { SelectCoreNode } from './Nodes/SelectCore';
+import type { SqlLiteralNode } from './Nodes/SqlLiteral';
+import type { TableAliasNode } from './Nodes/TableAlias';
+import type { LateralNode } from './Nodes/Unary';
+import type { NamedWindowNode } from './Nodes/Window';
 import { Table } from './Table';
 import { TreeManager } from './TreeManager';
+import type { Expression, JoinType, RelationLike, SelectStatementNode } from './types';
 import { lastOrThrow } from './utilities/array';
 import { collapse, Join } from './utilities/nodes';
 
-type TableType = any;
+/**
+ * If the expression is a node that wraps a primitive value (like a `Quoted`
+ * or `Casted`), return the underlying value. Otherwise return the expression
+ * itself. Used by `.offset()` / `.taken()` so callers see e.g. `10` not
+ * `Quoted(10)`.
+ */
+const unwrapValue = (expr: Expression | undefined): Expression => {
+  if (expr && typeof expr === 'object' && 'value' in expr) {
+    return (expr as { value: Expression }).value;
+  }
+  return expr as Expression;
+};
 
 export class SelectManager extends TreeManager {
-  constructor(table?: TableType) {
+  public declare ast: SelectStatementNode;
+
+  constructor(table?: RelationLike) {
     super();
     this.ast = new Nodes.SelectStatement(table);
   }
 
-  ctx = () => lastOrThrow(this.ast.cores);
-  limit = () => this.ast.limit?.expression;
-  constraints = () => this.ctx().wheres;
-  offset = () => this.ast.offset?.expression;
-  skip = (amount?: number) => {
-    if (amount) {
+  ctx = (): SelectCoreNode => lastOrThrow(this.ast.cores);
+  limit = (): Expression => this.ast.limit?.expression as Expression;
+  constraints = (): Expression[] => this.ctx().wheres;
+  offset = (): Expression => unwrapValue(this.ast.offset?.expression);
+  taken = (): Expression => unwrapValue(this.ast.limit?.expression);
+  skip = (amount?: number | null) => {
+    if (amount != null) {
       this.ast.offset = new Nodes.Offset(amount);
     } else {
       this.ast.offset = null;
@@ -26,11 +47,12 @@ export class SelectManager extends TreeManager {
     return this;
   };
   exists = () => new Nodes.Exists(this.ast);
-  as = (alias: string) =>
-    new Nodes.TableAlias(new Nodes.Grouping(this.ast), new Nodes.SqlLiteral(alias, { retryable: true }));
-  lock = (locking: true | any | string = new Nodes.SqlLiteral('FOR UPDATE')) => {
-    // sqlLiteralNode
-    let lockValue: any;
+  as = (alias: string | SqlLiteralNode): TableAliasNode => {
+    const right = typeof alias === 'string' ? new Nodes.SqlLiteral(alias, { retryable: true }) : alias;
+    return new Nodes.TableAlias(new Nodes.Grouping(this.ast), right);
+  };
+  lock = (locking: true | string | SqlLiteralNode = new Nodes.SqlLiteral('FOR UPDATE')) => {
+    let lockValue: SqlLiteralNode;
     if (locking === true) {
       lockValue = new Nodes.SqlLiteral('FOR UPDATE');
     } else if (typeof locking === 'string') {
@@ -42,87 +64,91 @@ export class SelectManager extends TreeManager {
     this.ast.lock = new Nodes.Lock(lockValue);
     return this;
   };
-  locked = () => this.ast.lock != null;
-  on = (...expressions: any[]) => {
+  locked = (): boolean => this.ast.lock != null;
+  on = (...expressions: Array<Expression | string>) => {
     const joinSource = this.ctx().source;
     const lastJoinOperation = lastOrThrow(joinSource.right);
-    lastJoinOperation.right = new Nodes.On(collapse(expressions));
+    const mappedExpressions = expressions.map((e) => (typeof e === 'string' ? new Nodes.SqlLiteral(e) : e));
+    lastJoinOperation.right = new Nodes.On(collapse(mappedExpressions));
     return this;
   };
-  group = (...columns: string[]) => {
+  group = (...columns: Array<Expression | string>) => {
     columns.forEach((column) => {
-      let literalNode: any;
-      if (typeof column === 'string') {
-        literalNode = new Nodes.SqlLiteral(column);
-      } else {
-        literalNode = column;
-      }
-
+      const literalNode = typeof column === 'string' ? new Nodes.SqlLiteral(column) : column;
       this.ctx().groups.push(new Nodes.Group(literalNode));
     });
     return this;
   };
-  from = (table: any) => {
+  from = (table: Table | TableAliasNode | SqlLiteralNode | string | JoinNode) => {
     const joinSource = this.ctx().source;
     if (typeof table === 'string') {
       joinSource.left = new Nodes.SqlLiteral(table, { retryable: true });
-    } else if (table instanceof Table) {
+    } else if (table instanceof Table || table instanceof Nodes.SqlLiteral || table instanceof Nodes.TableAlias) {
       joinSource.left = table;
     } else {
+      // Already narrowed to JoinNode via the union exclusion above.
       joinSource.right.push(table);
     }
 
     return this;
   };
-  froms = () => this.ast.cores.map((core) => core.from).filter((from) => Boolean(from));
-  join = (relation?: any, joinType: JoinType = 'inner') => {
-    if (!relation) return this;
+  froms = (): RelationLike[] =>
+    this.ast.cores.map((core) => core.from).filter((from): from is RelationLike => Boolean(from));
+  get joinSources(): JoinNode[] {
+    return this.ctx().source.right;
+  }
+  join = (relation?: RelationLike | string | null, joinType: JoinType = 'inner') => {
+    if (relation == null) return this;
+    if (typeof relation === 'string' && relation === '') {
+      throw new EmptyJoinError('Cannot join on empty string');
+    }
     const joinSource = this.ctx().source;
+    let actualRelation: RelationLike;
+    let actualJoinType: JoinType;
     if (typeof relation === 'string') {
-      joinType = 'string';
-      relation = new Nodes.SqlLiteral(relation);
+      actualJoinType = 'string';
+      actualRelation = new Nodes.SqlLiteral(relation);
     } else if (relation instanceof Nodes.SqlLiteral) {
-      joinType = 'string';
+      actualJoinType = 'string';
+      actualRelation = relation;
+    } else {
+      actualJoinType = joinType;
+      actualRelation = relation;
     }
-    const joinNodeClass = Join(joinType);
-    joinSource.right.push(new joinNodeClass(relation, [], joinType));
+    const joinNodeClass = Join(actualJoinType);
+    joinSource.right.push(new joinNodeClass(actualRelation, null));
     return this;
   };
-  outerJoin = (relation: any) => this.join(relation, 'outer');
-  having = (expression: any) => {
-    if (typeof expression === 'string') {
-      expression = new Nodes.SqlLiteral(expression);
-    }
-
-    this.ctx().havings.push(expression);
+  outerJoin = (relation: RelationLike | string) => this.join(relation, 'outer');
+  having = (expression: Expression | string) => {
+    const expr = typeof expression === 'string' ? new Nodes.SqlLiteral(expression) : expression;
+    this.ctx().havings.push(expr);
     return this;
   };
-  window = (name: string) => {
-    const window = new Nodes.Window(name);
+  window = (name: string): NamedWindowNode => {
+    const window = new Nodes.NamedWindow(name);
     this.ctx().windows.push(window);
     return window;
   };
-  project = (...projections: any[]) => {
+  project = (...projections: Array<Expression | string>) => {
     projections.forEach((projection) => {
-      if (typeof projection === 'string') {
-        projection = new Nodes.SqlLiteral(projection);
-      }
-      this.ctx().projections.push(projection);
+      const proj = typeof projection === 'string' ? new Nodes.SqlLiteral(projection) : projection;
+      this.ctx().projections.push(proj);
     });
     return this;
   };
-  projections = () => this.ctx().projections;
-  setProjections = (projections: any[]) => {
+  projections = (): Expression[] => this.ctx().projections;
+  setProjections = (projections: Expression[]) => {
     this.ctx().projections = projections;
     return this;
   };
-  optimizerHints = (...optimizerHints: any[]) => {
+  optimizerHints = (...optimizerHints: Expression[]): SelectManager => {
     if (optimizerHints.length === 0) return this;
 
     this.ctx().optimizerHints = new Nodes.OptimizerHints(optimizerHints);
     return this;
   };
-  distinct = (value = true) => {
+  distinct = (value: boolean = true) => {
     if (value) {
       this.ctx().setQuantifier = new Nodes.Distinct();
     } else {
@@ -131,7 +157,7 @@ export class SelectManager extends TreeManager {
 
     return this;
   };
-  distinctOn = (value?: any | null) => {
+  distinctOn = (value?: Expression | null) => {
     if (value) {
       this.ctx().setQuantifier = new Nodes.DistinctOn(value);
     } else {
@@ -139,34 +165,53 @@ export class SelectManager extends TreeManager {
     }
     return this;
   };
-  order = (...orders: any[]) => {
+  order = (...orders: Array<Expression | string>) => {
     orders.forEach((order) => {
-      if (typeof order === 'string') {
-        order = new Nodes.SqlLiteral(order);
-      }
-      this.ast.orders.push(order);
+      const o = typeof order === 'string' ? new Nodes.SqlLiteral(order) : order;
+      this.ast.orders.push(o);
     });
     return this;
   };
-  orders = () => this.ast.orders;
-  where = (expression: any) => {
+  orders = (): Expression[] => this.ast.orders;
+  where = (expression: Expression | string | TreeManager) => {
+    let expr: Expression;
     if (typeof expression === 'string') {
-      expression = new Nodes.SqlLiteral(expression);
+      expr = new Nodes.SqlLiteral(expression);
     } else if (expression instanceof TreeManager) {
-      expression = expression.ast;
+      expr = expression.ast as Expression; // TreeManager.ast is unknown — narrows to Expression for the where clause
+    } else {
+      expr = expression;
     }
 
-    this.ctx().wheres.push(expression);
+    this.ctx().wheres.push(expr);
     return this;
   };
-  union = (other: any) => new Nodes.Union(this.ast, other.ast);
-  unionAll = (other: any) => new Nodes.UnionAll(this.ast, other.ast);
+  union = (other: SelectManager) => new Nodes.Union(this.ast, other.ast);
+  unionAll = (other: SelectManager) => new Nodes.UnionAll(this.ast, other.ast);
+  intersect = (other: SelectManager) => new Nodes.Intersect(this.ast, other.ast);
+  except = (other: SelectManager) => new Nodes.Except(this.ast, other.ast);
   take = (limit?: number | null) => {
-    if (limit) {
+    if (limit != null) {
       this.ast.limit = new Nodes.Limit(limit);
     } else {
       this.ast.limit = null;
     }
     return this;
+  };
+  with = (...subqueries: Array<'recursive' | Expression>) => {
+    const isRecursive = subqueries[0] === 'recursive';
+    const queries: Expression[] = isRecursive ? (subqueries.slice(1) as Expression[]) : (subqueries as Expression[]);
+
+    const NodeClass = isRecursive ? Nodes.WithRecursive : Nodes.With;
+    this.ast.with = new NodeClass(queries);
+    return this;
+  };
+
+  lateral = (tableName?: string): LateralNode | TableAliasNode => {
+    const lateralNode = new Nodes.Lateral(new Nodes.Grouping(this.ast));
+    if (tableName) {
+      return new Nodes.TableAlias(lateralNode, new Nodes.SqlLiteral(tableName));
+    }
+    return lateralNode;
   };
 }

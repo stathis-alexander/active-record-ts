@@ -1,9 +1,16 @@
-import { UnaryNode } from './Unary';
+import { type ExpressionType, UnaryNode } from './Unary';
 
 export class UnaryOperationNode extends UnaryNode {
-  public readonly operator: string = '';
+  public readonly operator: string;
+
+  constructor(operator: string, expression: ExpressionType) {
+    super(expression);
+    this.operator = operator;
+  }
 }
 
 export class BitwiseNotNode extends UnaryOperationNode {
-  public override readonly operator = '~';
+  constructor(expression: ExpressionType) {
+    super('~', expression);
+  }
 }

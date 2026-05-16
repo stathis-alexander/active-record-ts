@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'bun:test';
+import type { Expression } from '../../src';
 import Arel from '../../src';
 
-class TypedNode extends Arel.Nodes.NamedFunction {
-  public typeCaster: any;
+/**
+ * Shape that `HomogeneousIn.castedValues()` consults — a no-arg function that
+ * returns the type used to serialize bind values. Tests pass `String` here
+ * (Ruby-style: the class object stands in for the type).
+ */
+type TypeCaster = () => unknown;
 
-  constructor(name: string, expr: any, type: any) {
+class TypedNode extends Arel.Nodes.NamedFunction {
+  public typeCaster: TypeCaster;
+
+  constructor(name: string, expr: Expression | Expression[], type: TypeCaster) {
     super(name, expr);
     this.typeCaster = type;
   }

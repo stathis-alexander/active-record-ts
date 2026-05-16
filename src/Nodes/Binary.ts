@@ -1,17 +1,23 @@
 import { Attribute } from '../Attribute';
 import { NodeExpression } from '../NodeExpression';
+import type { Expression } from '../types';
 import { hash } from '../utilities/hash';
 import { Nodes } from '.';
 import type { FetchAttributeCallbackType } from './Node';
 
-export type LeftType = any;
-export type RightType = any;
+export type LeftType = Expression;
+export type RightType = Expression;
 
+/**
+ * `left` and `right` are typed as `unknown` here so that subclasses can
+ * narrow them to specific shapes (e.g. `JoinSourceNode.right` is `JoinNode[]`,
+ * `CteNode.relation` is `RelationLike`). Use casts at consumption points.
+ */
 export class BinaryNode extends NodeExpression {
-  public left: LeftType;
-  public right: RightType;
+  public left: unknown;
+  public right: unknown;
 
-  constructor(left: LeftType, right: RightType) {
+  constructor(left: unknown, right?: unknown) {
     super();
     this.left = left;
     this.right = right;
@@ -23,7 +29,10 @@ export class BinaryNode extends NodeExpression {
 }
 
 export class AsNode extends BinaryNode {
-  toCte = () => new Nodes.Cte(this.left.name, this.right);
+  toCte = () => {
+    const left = this.left as { name: string };
+    return new Nodes.Cte(left.name, this.right as import('../types').RelationLike);
+  };
 }
 export class AssignmentNode extends BinaryNode {}
 export class IntersectNode extends BinaryNode {}

@@ -1,13 +1,12 @@
 import { NodeExpression } from '../NodeExpression';
+import type { Expression } from '../types';
 import { hash } from '../utilities/hash';
 import type { FetchAttributeCallbackType } from './Node';
 
-type ChildrenType = any[];
-
 class NaryNode extends NodeExpression {
-  public children: ChildrenType;
+  public children: Expression[];
 
-  constructor(children: ChildrenType) {
+  constructor(children: Expression[]) {
     super();
     this.children = children;
   }
@@ -20,7 +19,10 @@ class NaryNode extends NodeExpression {
   }
 
   override fetchAttribute = (callback: FetchAttributeCallbackType) =>
-    this.children.length > 0 && this.children.every((child) => child.fetchAttribute(callback));
+    this.children.length > 0 &&
+    this.children.every((child) =>
+      (child as { fetchAttribute?: (cb: FetchAttributeCallbackType) => unknown }).fetchAttribute?.(callback),
+    );
 
   override hash = () => {
     return hash([this.constructor.name, ...this.children]);

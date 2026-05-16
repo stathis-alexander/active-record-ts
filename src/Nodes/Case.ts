@@ -1,4 +1,5 @@
 import { NodeExpression } from '../NodeExpression';
+import type { Expression } from '../types';
 import { lastOrThrow } from '../utilities/array';
 import { hash } from '../utilities/hash';
 import { buildQuoted } from '../utilities/nodes';
@@ -8,24 +9,24 @@ import { UnaryNode } from './Unary';
 export class WhenNode extends BinaryNode {}
 export class ElseNode extends UnaryNode {}
 
-type CaseType = any;
-type ConditionType = any;
-type ConditionsType = ConditionType[];
-type DefaultType = any;
-
 export class CaseNode extends NodeExpression {
-  public case: CaseType;
-  public conditions: ConditionsType;
-  public default: DefaultType;
+  public case: Expression | null;
+  public conditions: WhenNode[];
+  /**
+   * The `ELSE` branch. Typed as `ElseNode | Expression | null` so test fixtures
+   * (matching Rails Arel's Ruby tests) can store raw values; `.else(...)` always
+   * wraps in an `ElseNode`.
+   */
+  public default: ElseNode | Expression | null;
 
-  constructor(expression?: CaseType, defaultCase?: DefaultType) {
+  constructor(expression?: Expression | null, defaultCase?: ElseNode | Expression | null) {
     super();
-    this.case = expression;
+    this.case = expression ?? null;
     this.conditions = [];
-    this.default = defaultCase;
+    this.default = defaultCase ?? null;
   }
 
-  override when = (condition: ConditionType, expression?: RightType) => {
+  override when = (condition: Expression, expression?: RightType) => {
     this.conditions.push(new WhenNode(buildQuoted(condition), expression));
     return this;
   };
@@ -36,7 +37,7 @@ export class CaseNode extends NodeExpression {
     return this;
   };
 
-  else = (expression: DefaultType) => {
+  else = (expression: Expression) => {
     this.default = new ElseNode(buildQuoted(expression));
     return this;
   };

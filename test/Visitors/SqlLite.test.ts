@@ -6,17 +6,15 @@ const Offset = Arel.Nodes.Offset;
 
 describe('Visitors.SQLite', () => {
   let table: Arel.Table;
+  let visitor: Arel.Visitors.SQLite;
 
   beforeEach(() => {
-    // Note: SQLite visitor implementation would be needed
-    // visitor = new Arel.Visitors.SQLite();
+    visitor = new Arel.Visitors.SQLite();
     table = new Arel.Table('users');
   });
 
-  function compile(node: any): string {
-    // Note: This would need actual SQLite visitor implementation
-    // return visitor.accept(node, new Arel.Collectors.SqlString()).value;
-    return node.toString(); // Placeholder
+  function compile(node: unknown): string {
+    return visitor.accept(node, new Arel.Collectors.SqlString()).value();
   }
 
   it('defaults limit to -1', () => {

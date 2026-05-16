@@ -221,4 +221,30 @@ describe('InsertManager', () => {
       expect(manager.toSql()).toContain('INSERT INTO "users" ("id", "name") (SELECT 1, "aaron")');
     });
   });
+
+  describe('returning', () => {
+    it('accepts a returning clause', () => {
+      const users = new Arel.Table('users');
+      const manager = new Arel.InsertManager();
+      manager.into(users);
+      manager.returning(Arel.star);
+
+      expect(manager.toSql()).toContain('INSERT INTO "users" RETURNING *');
+    });
+
+    it('accepts multiple values as returning clause', () => {
+      const users = new Arel.Table('users');
+      const manager = new Arel.InsertManager();
+      manager.into(users);
+      manager.returning(Arel.star);
+      manager.returning([users.attribute('id'), users.attribute('name')]);
+
+      expect(manager.toSql()).toContain('INSERT INTO "users" RETURNING *, "users"."id", "users"."name"');
+    });
+
+    it('chains', () => {
+      const manager = new Arel.InsertManager();
+      expect(manager.returning(Arel.star)).toBe(manager);
+    });
+  });
 });

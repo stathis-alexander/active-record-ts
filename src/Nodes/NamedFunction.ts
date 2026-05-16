@@ -1,10 +1,10 @@
 import { hash } from '../utilities/hash';
-import { FunctionNode } from './Function';
+import { type ExpressionsType, FunctionNode } from './Function';
 
 export class NamedFunctionNode extends FunctionNode {
   public readonly name: string;
 
-  constructor(name: string, expression: any) {
+  constructor(name: string, expression: ExpressionsType) {
     super(expression);
     this.name = name;
   }

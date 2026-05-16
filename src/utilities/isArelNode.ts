@@ -1,6 +1,6 @@
 import { Attribute } from '../Attribute';
 import { Nodes } from '../Nodes';
 
-// biome-ignore lint/suspicious/noExplicitAny: allow anything because we're testing if it's an Arel node
-export const isArelNode = (value: any) =>
+/** Type guard: does `value` belong to the Arel AST? */
+export const isArelNode = (value: unknown): boolean =>
   value instanceof Nodes.Node || value instanceof Nodes.SqlLiteral || value instanceof Attribute;

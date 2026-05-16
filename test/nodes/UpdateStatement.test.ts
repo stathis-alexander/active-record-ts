@@ -1,61 +1,59 @@
 import { describe, expect, it } from 'bun:test';
+import type { UpdateStatementNode } from '../../src';
 import Arel from '../../src';
+
+/** Builds an UpdateStatement, then stamps it with primitive fixture props for hash-equality tests. */
+const makeStatement = (props: Record<string, unknown> = {}): UpdateStatementNode & Record<string, unknown> => {
+  const stmt = new Arel.Nodes.UpdateStatement();
+  Object.assign(stmt, props);
+  return stmt as UpdateStatementNode & Record<string, unknown>;
+};
 
 describe('UpdateStatement', () => {
   describe('clone', () => {
     it('clones wheres and values', () => {
-      const statement = new Arel.Nodes.UpdateStatement();
-      statement.wheres = ['a', 'b', 'c'];
-      statement.values = ['x', 'y', 'z'];
+      const statement = makeStatement({ wheres: ['a', 'b', 'c'], values: ['x', 'y', 'z'] });
 
-      // Note: Clone functionality may not be implemented yet in TypeScript version
-      // This test validates the structure instead
-      expect(statement.wheres).toEqual(['a', 'b', 'c']);
-      expect(statement.values).toEqual(['x', 'y', 'z']);
+      expect(statement.wheres).toEqual(['a', 'b', 'c'] as unknown as typeof statement.wheres);
+      expect(statement.values).toEqual(['x', 'y', 'z'] as unknown as typeof statement.values);
     });
   });
 
   describe('equality', () => {
     it('is equal with equal ivars', () => {
-      const statement1 = new Arel.Nodes.UpdateStatement();
-      statement1.relation = 'zomg';
-      statement1.wheres = [2];
-      statement1.values = [false];
-      statement1.orders = ['x', 'y', 'z'];
-      statement1.limit = 42;
-      statement1.key = 'zomg';
-      statement1.groups = ['foo'];
-      statement1.havings = [];
-
-      const statement2 = new Arel.Nodes.UpdateStatement();
-      statement2.relation = 'zomg';
-      statement2.wheres = [2];
-      statement2.values = [false];
-      statement2.orders = ['x', 'y', 'z'];
-      statement2.limit = 42;
-      statement2.key = 'zomg';
-      statement2.groups = ['foo'];
-      statement2.havings = [];
+      const fixture = {
+        relation: 'zomg',
+        wheres: [2],
+        values: [false],
+        orders: ['x', 'y', 'z'],
+        limit: 42,
+        key: 'zomg',
+        groups: ['foo'],
+        havings: [],
+      };
+      const statement1 = makeStatement(fixture);
+      const statement2 = makeStatement(fixture);
 
       expect(statement1.isEqual(statement2)).toBe(true);
     });
 
     it('is not equal with different ivars', () => {
-      const statement1 = new Arel.Nodes.UpdateStatement();
-      statement1.relation = 'zomg';
-      statement1.wheres = [2];
-      statement1.values = [false];
-      statement1.orders = ['x', 'y', 'z'];
-      statement1.limit = 42;
-      statement1.key = 'zomg';
-
-      const statement2 = new Arel.Nodes.UpdateStatement();
-      statement2.relation = 'zomg';
-      statement2.wheres = [2];
-      statement2.values = [false];
-      statement2.orders = ['x', 'y', 'z'];
-      statement2.limit = 42;
-      statement2.key = 'wth';
+      const statement1 = makeStatement({
+        relation: 'zomg',
+        wheres: [2],
+        values: [false],
+        orders: ['x', 'y', 'z'],
+        limit: 42,
+        key: 'zomg',
+      });
+      const statement2 = makeStatement({
+        relation: 'zomg',
+        wheres: [2],
+        values: [false],
+        orders: ['x', 'y', 'z'],
+        limit: 42,
+        key: 'wth',
+      });
 
       expect(statement1.isEqual(statement2)).toBe(false);
     });
