@@ -79,8 +79,23 @@ describe('Validations', () => {
 
   test.skip('validates_each iterates attributes (TODO: validates_each)', () => {});
   test.skip('validates_each custom reader (TODO: read_attribute_for_validation)', () => {});
-  test.skip('validate { } block (TODO: block validators)', () => {});
-  test.skip('validate { |record| } block (TODO: block validators)', () => {});
+  test('validate { } block — inline block validator', async () => {
+    Topic.validate((t, errors) => {
+      errors.add('title', 'will never be valid');
+    });
+    const t = new Topic({ title: 'Title', content: 'whatever' });
+    expect(await t.isInvalid()).toBe(true);
+    expect(t.errors.on('title')).toContain('will never be valid');
+  });
+
+  test('validate { |record| } — block receives the record', async () => {
+    let received = false;
+    Topic.validate((record) => {
+      if (record instanceof Topic) received = true;
+    });
+    await new Topic().validate();
+    expect(received).toBe(true);
+  });
   test.skip('validates :if array immutability (TODO)', () => {});
   test.skip('invalid_validator raises NoMethodError (TODO: method-name validators)', () => {});
   test.skip('invalid_options_to_validate raises ArgumentError (TODO: arg checking)', () => {});
@@ -127,11 +142,38 @@ describe('Validations', () => {
   test.skip('validation message Proc receives record (TODO)', () => {});
   test.skip('validation message Proc receives record + data (TODO)', () => {});
 
-  test.skip('list of validators for model (TODO: validators introspection)', () => {});
-  test.skip('list of validators on an attribute (TODO: validators_on)', () => {});
-  test.skip('accessing instance of validator (TODO)', () => {});
-  test.skip('list of validators on multiple attributes (TODO)', () => {});
-  test.skip('list of validators empty when none (TODO)', () => {});
+  test('list of validators for model', () => {
+    Topic.validatesPresenceOf('title');
+    Topic.validatesLengthOf('title', { minimum: 2 });
+    const validators = Topic.validators();
+    expect(validators.length).toBe(2);
+    expect(validators.map((v) => (v as unknown as { kind: string }).kind)).toEqual(['presence', 'length']);
+  });
+
+  test('list of validators on an attribute', () => {
+    Topic.validatesPresenceOf('title');
+    Topic.validatesPresenceOf('content');
+    Topic.validatesLengthOf('title', { minimum: 2 });
+    const titleValidators = Topic.validatorsOn('title');
+    expect(titleValidators.length).toBe(2);
+    expect(titleValidators.map((v) => (v as unknown as { kind: string }).kind)).toEqual(['presence', 'length']);
+    const contentValidators = Topic.validatorsOn('content');
+    expect(contentValidators.length).toBe(1);
+  });
+
+  test('validators_on for multiple attributes', () => {
+    Topic.validates('title', { length: { minimum: 10 } });
+    Topic.validates('authorName', { presence: true, format: { with: /a/ } });
+    const validators = Topic.validatorsOn('title', 'authorName');
+    expect(validators.length).toBe(3);
+  });
+
+  test('validators_on is empty when no validator matches', () => {
+    Topic.validates('title', { length: { minimum: 10 } });
+    expect(Topic.validatorsOn('authorName')).toEqual([]);
+  });
+
+  test.skip('accessing instance of validator — `validators_on(:title).first.options` (TODO: option exposure)', () => {});
 
   test('validations on the instance level', async () => {
     Topic.validatesPresenceOf('title');

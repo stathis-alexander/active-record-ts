@@ -78,11 +78,70 @@ describe('Transactions — Rollback sentinel', () => {
 });
 
 describe('Transactions — after_commit / after_rollback', () => {
-  test.skip('after_commit fires only after outer commit (TODO: after_commit callback)', () => {});
-  test.skip('after_rollback fires when transaction rolls back (TODO)', () => {});
-  test.skip('after_commit on update vs create (TODO)', () => {});
-  test.skip('after_commit on destroy (TODO)', () => {});
-  test.skip('after_create_commit shorthand (TODO)', () => {});
+  test('after_commit fires only after outermost commit', async () => {
+    class WithHook extends Topic {}
+    const log: string[] = [];
+    WithHook.afterCommit(() => { log.push('commit'); });
+    WithHook.useConnection(fx.adapter);
+    await WithHook.loadSchema();
+    await WithHook.transaction(async () => {
+      await WithHook.create({ title: 'a' });
+      expect(log).toEqual([]);  // not yet
+      await WithHook.transaction(async () => {
+        await WithHook.create({ title: 'b' });
+      });
+      expect(log).toEqual([]);  // still not yet — outer hasn't committed
+    });
+    // Now outer committed; both create hooks fire.
+    expect(log).toEqual(['commit', 'commit']);
+  });
+
+  test('after_rollback fires when the transaction rolls back', async () => {
+    class WithHook extends Topic {}
+    const log: string[] = [];
+    WithHook.afterCommit(() => { log.push('commit'); });
+    WithHook.afterRollback(() => { log.push('rollback'); });
+    WithHook.useConnection(fx.adapter);
+    await WithHook.loadSchema();
+    try {
+      await WithHook.transaction(async () => {
+        await WithHook.create({ title: 'a' });
+        throw new Error('boom');
+      });
+    } catch {
+      /* expected */
+    }
+    expect(log).toEqual(['rollback']);
+  });
+
+  test('after_commit filtered by on: "create" / "update"', async () => {
+    class WithHook extends Topic {}
+    const log: string[] = [];
+    WithHook.afterCommit(() => { log.push('create-commit'); }, { on: 'create' });
+    WithHook.afterCommit(() => { log.push('update-commit'); }, { on: 'update' });
+    WithHook.useConnection(fx.adapter);
+    await WithHook.loadSchema();
+    const t = await WithHook.create({ title: 'a' });
+    expect(log).toEqual(['create-commit']);
+    log.length = 0;
+    t.writeAttribute('title', 'b');
+    await t.save();
+    expect(log).toEqual(['update-commit']);
+  });
+
+  test('after_commit on destroy', async () => {
+    class WithHook extends Topic {}
+    const log: string[] = [];
+    WithHook.afterCommit(() => { log.push('destroy-commit'); }, { on: 'destroy' });
+    WithHook.useConnection(fx.adapter);
+    await WithHook.loadSchema();
+    const t = await WithHook.create({ title: 'a' });
+    log.length = 0;
+    await t.destroy();
+    expect(log).toEqual(['destroy-commit']);
+  });
+
+  test.skip('after_create_commit shorthand (TODO: helper alias)', () => {});
 });
 
 describe('Transactions — isolation', () => {
@@ -92,8 +151,28 @@ describe('Transactions — isolation', () => {
 });
 
 describe('Transactions — concurrency', () => {
-  test.skip('with_lock acquires a row lock (TODO: with_lock)', () => {});
-  test.skip('lock! refreshes lock (TODO: lock! method)', () => {});
+  test('withLock wraps in a transaction and yields the reloaded record', async () => {
+    const t = await Topic.create({ title: 'guarded' });
+    let observed: string | null = null;
+    await t.withLock(async (record) => {
+      observed = record.readAttribute('title') as string;
+      record.writeAttribute('title', 'guarded-mutated');
+      await record.save();
+    });
+    expect(observed).toBe('guarded' as never);
+    const after = await Topic.find(t.id);
+    expect(after.readAttribute('title')).toBe('guarded-mutated');
+  });
+
+  test('lock! reloads the record from the database', async () => {
+    const t = await Topic.create({ title: 'original' });
+    t.writeAttribute('title', 'pending in memory');
+    await Topic.transaction(async () => {
+      await t.lockOrThrow();
+    });
+    expect(t.readAttribute('title')).toBe('original');
+  });
+
   test.skip('two concurrent transactions see correct state (TODO: real concurrency setup)', () => {});
 });
 

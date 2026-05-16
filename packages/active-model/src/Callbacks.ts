@@ -10,7 +10,14 @@
  */
 
 export type CallbackKind = 'before' | 'after' | 'around';
-export type CallbackEvent = 'validation' | 'save' | 'create' | 'update' | 'destroy';
+export type CallbackEvent =
+  | 'validation'
+  | 'save'
+  | 'create'
+  | 'update'
+  | 'destroy'
+  | 'commit'
+  | 'rollback';
 
 export type CallbackFn<T> = (record: T) => void | boolean | Promise<void | boolean>;
 export type AroundCallbackFn<T> = (record: T, run: () => Promise<void>) => Promise<void>;
@@ -39,6 +46,8 @@ export class CallbackChain<T> {
     create: [],
     update: [],
     destroy: [],
+    commit: [],
+    rollback: [],
   };
 
   /** Register a new callback under `event` of `kind`. */

@@ -54,8 +54,18 @@ describe('Finder — find by id', () => {
 
   test.skip('find with string id (TODO: numeric-coercion of string ids)', () => {});
 
-  test.skip('find_by_id with hash (TODO: dynamic finder)', () => {});
-  test.skip('find_by_title_and_id_with_hash (TODO: dynamic finder)', () => {});
+  test('dynamic finder findByTitle returns matching record', async () => {
+    const t = await (Topic as unknown as { findByTitle: (v: unknown) => Promise<Topic | null> }).findByTitle('second');
+    expect(t?.readAttribute('author_name')).toBe('Sandy');
+  });
+
+  test('dynamic finder findByTitleOrThrow throws when missing', async () => {
+    await expect(
+      (Topic as unknown as { findByTitleOrThrow: (v: unknown) => Promise<Topic> }).findByTitleOrThrow('nope'),
+    ).rejects.toThrow();
+  });
+
+  test.skip('find_by_title_and_id_with_hash (TODO: multi-attribute dynamic finder)', () => {});
 });
 
 describe('Finder — find_or_initialize_by / find_or_create_by', () => {
