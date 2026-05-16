@@ -941,10 +941,16 @@ describe('SelectManager', () => {
       assertLike(String(manager.whereSql()), 'WHERE "users"."id" = 10 AND "users"."id" = 11');
     });
 
-    it.skip('handles database-specific statements', () => {
-      // SKIP: needs whereSql to accept a visitor instance (Rails passes the engine's
-      // connection visitor — PostgreSQL — so MATCHES renders ILIKE). The current
-      // whereSql always uses ToSql. Plumbing the engine/visitor through is non-trivial.
+    it('handles database-specific statements', () => {
+      const table = new Arel.Table('users');
+      const manager = new Arel.SelectManager();
+      manager.from(table);
+      manager.where(table.attribute('id').equal(10));
+      manager.where(table.attribute('name').matches('foo%'));
+      assertLike(
+        String(manager.whereSql(new Arel.Visitors.PostgreSQL())),
+        `WHERE "users"."id" = 10 AND "users"."name" ILIKE 'foo%'`,
+      );
     });
 
     it('returns nil when there are no wheres', () => {

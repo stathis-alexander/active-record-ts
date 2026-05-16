@@ -233,11 +233,9 @@ export class SelectManager extends TreeManager {
    * Render the WHERE clause as a `SqlLiteral`, joining multiple wheres with
    * AND. Returns `null` when there are no wheres. Mirrors Rails' `where_sql`.
    */
-  whereSql = (engine?: unknown): SqlLiteralNode | null => {
+  whereSql = (visitor: ToSql = new ToSql()): SqlLiteralNode | null => {
     const wheres = this.ctx().wheres;
     if (wheres.length === 0) return null;
-    void engine; // Currently unused — kept for parity with Rails' signature.
-    const visitor = new ToSql();
     const collector = new Collectors.SqlString();
     const andNode = new Nodes.And(wheres);
     const sql = visitor.accept(andNode, collector).value();
