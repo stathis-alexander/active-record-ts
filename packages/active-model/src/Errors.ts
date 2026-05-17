@@ -247,6 +247,32 @@ export class Errors {
     return this.entries[0] ? new ErrorObject(this.entries[0]) : null;
   }
 
+  /**
+   * Structured details payload. Each attribute maps to a list of
+   * `{ error: type, ...options }` records. Mirrors Rails' `errors.details`.
+   */
+  get details(): Record<string, Array<{ error: string | undefined } & Record<string, unknown>>> {
+    const out: Record<string, Array<{ error: string | undefined } & Record<string, unknown>>> = {};
+    for (const entry of this.entries) {
+      (out[entry.attribute] ??= []).push({ error: entry.type, ...(entry.options ?? {}) });
+    }
+    return out;
+  }
+
+  /** Group rich error objects by attribute. */
+  groupByAttribute(): Record<string, ErrorObject[]> {
+    const out: Record<string, ErrorObject[]> = {};
+    for (const entry of this.entries) {
+      (out[entry.attribute] ??= []).push(new ErrorObject(entry));
+    }
+    return out;
+  }
+
+  /** Indifferent indexer — `errors.get('name')` is equivalent to `errors.on('name')`. */
+  get(attribute: string): string[] {
+    return this.on(attribute);
+  }
+
   get count(): number {
     return this.entries.length;
   }

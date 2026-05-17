@@ -143,7 +143,15 @@ describe('Relations — chainable', () => {
     const top = await (Scoped2 as unknown as { ordered: () => { limit: (n: number) => Promise<Scoped2[]> } }).ordered().limit(2);
     expect(top.map((r) => r.readAttribute('title'))).toEqual(['C', 'B']);
   });
-  test.skip('extending (TODO)', () => {});
+  test('extending adds methods onto the returned Relation', async () => {
+    const scope = Topic.all().extending({
+      titles: async function (this: { toArray: () => Promise<Topic[]> }) {
+        return (await this.toArray()).map((t) => t.readAttribute('title'));
+      },
+    });
+    const names = await scope.titles();
+    expect(names.sort()).toEqual(['A', 'B', 'C']);
+  });
   test.skip('group + having (TODO: group/having combinations)', () => {});
 
   // joins / includes / preload covered in associations_test.ts now that the

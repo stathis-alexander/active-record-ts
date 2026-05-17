@@ -140,7 +140,24 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
     expect(cols.find((c) => c.name === 'name')).toBeUndefined();
   });
 
-  test.skip('change_column on SQLite (TODO: SQLite-specific path)', () => {});
+  test('change_column on SQLite rebuilds the table with the new type', async () => {
+    class CC extends Migration {
+      static override version = '700';
+      override async up() {
+        await this.createTable('cc', (t) => {
+          t.string('name');
+          t.integer('age');
+        });
+        await this.changeColumn('cc', 'age', 'text');
+      }
+    }
+    await new Migrator(adapter, [CC]).up();
+    // Insert a row to make sure the rebuilt table works.
+    await adapter.exec(`INSERT INTO "cc" ("name", "age") VALUES (?, ?)`, ['A', 'thirty-one']);
+    const cols = await adapter.columns('cc');
+    const ageCol = cols.find((c) => c.name === 'age');
+    expect(ageCol?.sqlType.toUpperCase()).toMatch(/TEXT/);
+  });
 
   test('rename_table renames a table', async () => {
     class Rename extends Migration {
