@@ -24,6 +24,7 @@ import { Arel, Nodes as ArelNodes } from '@arelts/arel';
 import type { Attribute as ArelAttribute, BindParamNode } from '@arelts/arel';
 import { Model, lookupType, tableize, type Type, type TypeRef } from '@arelts/active-model';
 import { Rollback, type ConnectionAdapter } from './ConnectionAdapter';
+import { connectionContext, setRoleConnection, setDatabaseConnection, type ConnectionContext } from './connection';
 import { getConnection, setConnection } from './connection';
 import { buildAdapter } from './adapters';
 import type { ColumnInfo, ConnectionConfig } from './types';
@@ -290,6 +291,11 @@ const applyDependent = async (owner: Base, reflection: AssociationReflection): P
 // unused-import warning when it's only referenced by JSDoc samples.
 void pluralize;
 
+/** Type guard: tell adapter instances apart from raw config objects. */
+const isAdapter = (value: unknown): value is ConnectionAdapter => {
+  return !!value && typeof value === 'object' && 'adapterName' in (value as object) && typeof (value as { execute?: unknown }).execute === 'function';
+};
+
 /** STI class registry — maps a type-column string (e.g. `'Manager'`) to its registered subclass. */
 const STI_REGISTRY = new Map<string, BaseConstructor>();
 
@@ -486,6 +492,65 @@ export class Base extends Model {
     setConnection(this, adapter);
   }
 
+  /**
+   * Register one or more connections under named roles ("writing",
+   * "reading") and/or named databases. Mirrors Rails'
+   * `connects_to(database: { writing:, reading: })`. Keys that match
+   * known role names (`'writing'`, `'reading'`) populate the role
+   * registry; other keys populate the database registry.
+   *
+   *   AppRecord.connectsTo({
+   *     writing: { adapter: 'postgres', url: PRIMARY_URL },
+   *     reading: { adapter: 'postgres', url: REPLICA_URL },
+   *   });
+   *   EventRecord.connectsTo({
+   *     events: { adapter: 'postgres', url: EVENTS_URL },
+   *   });
+   *
+   * Returns the writing adapter (default fallback for reads).
+   */
+  static async connectsTo<This extends typeof Base>(
+    this: This,
+    spec: Record<string, ConnectionConfig | ConnectionAdapter>,
+  ): Promise<ConnectionAdapter | null> {
+    const KNOWN_ROLES = new Set(['writing', 'reading', 'primary']);
+    let writingAdapter: ConnectionAdapter | null = null;
+    for (const [name, configOrAdapter] of Object.entries(spec)) {
+      const adapter: ConnectionAdapter = isAdapter(configOrAdapter)
+        ? configOrAdapter
+        : await (async () => {
+            const a = buildAdapter(configOrAdapter as ConnectionConfig);
+            await a.connect();
+            return a;
+          })();
+      if (KNOWN_ROLES.has(name)) {
+        setRoleConnection(this, name, adapter);
+        if (name === 'writing') writingAdapter = adapter;
+      } else {
+        setDatabaseConnection(this, name, adapter);
+      }
+    }
+    return writingAdapter;
+  }
+
+  /**
+   * Run `fn` with a specific role and/or database in effect. Mirrors
+   * Rails' `Class.connected_to(role:, database:)` block. Async-local —
+   * concurrent calls don't interfere with each other.
+   *
+   *   await User.connectedTo({ role: 'reading' }, async () => {
+   *     return User.where({ active: true }).count();
+   *   });
+   */
+  static async connectedTo<R>(
+    context: ConnectionContext,
+    fn: () => Promise<R>,
+  ): Promise<R> {
+    const prev = connectionContext.getStore();
+    const merged: ConnectionContext = { ...prev, ...context };
+    return connectionContext.run(merged, fn);
+  }
+
   /** Resolve the nearest configured adapter (walks the class chain). */
   static connection(): ConnectionAdapter {
     const adapter = getConnection(this);
@@ -648,7 +713,10 @@ export class Base extends Model {
 
   /** Reflect columns from the DB and register attributes. */
   static async loadSchema(): Promise<void> {
-    if (this.abstractClass) return;
+    // Abstract-class flag is non-inheriting (matches Rails). Only treat
+    // the class itself as abstract when the static field was set on its
+    // OWN constructor, not just inherited from an ancestor.
+    if (Object.prototype.hasOwnProperty.call(this, 'abstractClass') && this.abstractClass) return;
     const conn = this.connection();
     const cols = await conn.columns(this.effectiveTableName());
     // Preserve explicit composite-PK declarations — only fall back to the

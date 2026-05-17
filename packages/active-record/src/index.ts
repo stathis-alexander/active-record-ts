@@ -12,7 +12,18 @@ export {
   SQLiteAdapter,
 } from './adapters';
 export type { AdapterName, ColumnInfo, ConnectionConfig, ExecResult, Row } from './types';
-export { getConnection, setConnection, clearConnection } from './connection';
+export {
+  clearConnection,
+  connectionContext,
+  getConnection,
+  getRegistry,
+  setConnection,
+  setDatabaseConnection,
+  setRoleConnection,
+  type ConnectionContext,
+  type Role,
+  type RoleRegistry,
+} from './connection';
 export {
   defineAssociationAccessor,
   getAssociations,

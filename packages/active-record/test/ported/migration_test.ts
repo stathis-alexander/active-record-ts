@@ -262,6 +262,30 @@ describe('Migration — Rails-only / deferred', () => {
   test.skip('schema_migration_create_table_wont_be_affected_by_schema_cache (TODO: schema cache)', () => {});
   test.skip('migration_context_with_default_schema_migration (TODO: MigrationContext)', () => {});
   test.skip('migrator_versions enumeration (TODO: ensure parity)', () => {});
-  test.skip('name_collision_across_dbs (TODO: multi-database)', () => {});
+  test('name_collision_across_dbs: same model class can target different DBs in different scopes', async () => {
+    const { Base, SQLiteAdapter } = await import('../../src');
+    const dbA = new SQLiteAdapter({ adapter: 'sqlite', database: ':memory:' });
+    const dbB = new SQLiteAdapter({ adapter: 'sqlite', database: ':memory:' });
+    await dbA.connect();
+    await dbB.connect();
+    await dbA.exec(`CREATE TABLE widgets (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)`);
+    await dbB.exec(`CREATE TABLE widgets (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)`);
+    class Widget extends Base {
+      static override tableName = 'widgets';
+      declare name: string;
+    }
+    await Widget.connectsTo({ writing: dbA, replicas: dbB });
+    await Widget.loadSchema();
+    await Widget.create({ name: 'in-a' });
+    await Widget.connectedTo({ database: 'replicas' }, async () => {
+      await Widget.create({ name: 'in-b' });
+    });
+    expect(await Widget.count()).toBe(1);
+    await Widget.connectedTo({ database: 'replicas' }, async () => {
+      expect(await Widget.count()).toBe(1);
+    });
+    await dbA.disconnect();
+    await dbB.disconnect();
+  });
   test.skip('add_drop_table_with_prefix_and_suffix (TODO: table prefix/suffix config)', () => {});
 });
