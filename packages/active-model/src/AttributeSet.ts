@@ -110,6 +110,25 @@ export class Attributes {
     this.current.set(name, def.type.cast(value));
   }
 
+  /**
+   * Explicitly mark `name` as having been mutated in place — without
+   * actually writing a new value. Mirrors Rails' `name_will_change!`
+   * which captures the current value into the original snapshot for
+   * later mutation detection.
+   */
+  willChange(name: string): void {
+    if (!this.current.has(name) && !this.original.has(name)) return;
+    // The next read sees the current value as "the new value"; rewind
+    // original to a snapshot taken BEFORE further mutation.
+    const value = this.current.get(name);
+    // Stash a deep-ish copy of the current value as the original so subsequent
+    // in-place mutation to `current` is detectable as a change.
+    const snapshot = typeof value === 'object' && value !== null
+      ? (Array.isArray(value) ? [...value] : { ...value })
+      : value;
+    this.original.set(name, snapshot);
+  }
+
   /** Was this attribute changed since the last commit? */
   changed(name: string): boolean {
     if (!this.current.has(name)) return false;

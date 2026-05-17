@@ -61,8 +61,8 @@ export { RecordNotFound };
  */
 export type BaseConstructor<T extends Base = Base> = {
   new (values?: Record<string, unknown>): T;
-  tableName: string;
-  primaryKey: string;
+  tableName: string | null;
+  primaryKey: string | readonly string[];
   connection(): ConnectionAdapter;
   arelTable(): Arel.Table;
   instantiate(row: Record<string, unknown>): T;
@@ -212,6 +212,37 @@ const installDynamicFinderProxy = (ctor: typeof Base): void => {
       return null;
     },
   });
+};
+
+/**
+ * Build a `findBy`/`where` hash that matches a record's primary key.
+ * Returns `null` when any PK column is null/undefined (no usable identity).
+ */
+const primaryKeyConditions = (ctor: typeof Base, record: Base): Record<string, unknown> | null => {
+  const conditions: Record<string, unknown> = {};
+  for (const col of ctor.primaryKeyColumns()) {
+    const value = record.readAttribute(col);
+    if (value == null) return null;
+    conditions[col] = value;
+  }
+  return conditions;
+};
+
+/**
+ * Build an arel WHERE expression that matches the record's primary key —
+ * AND-joined across every PK column for composite primary keys.
+ */
+const primaryKeyMatcher = (ctor: typeof Base, table: Arel.Table, record: Base): import('@arelts/arel').Expression => {
+  const cols = ctor.primaryKeyColumns();
+  const equalities = cols.map((col) =>
+    table.attribute(col).equal(new ArelNodes.BindParam(record.readAttribute(col) as never)),
+  );
+  if (equalities.length === 1) return equalities[0]! as import('@arelts/arel').Expression;
+  let combined = equalities[0]! as unknown as import('@arelts/arel').Expression;
+  for (let i = 1; i < equalities.length; i++) {
+    combined = new ArelNodes.And([combined, equalities[i]! as unknown as import('@arelts/arel').Expression]) as unknown as import('@arelts/arel').Expression;
+  }
+  return combined;
 };
 
 /**
@@ -374,8 +405,22 @@ const getState = (ctor: typeof Base): ClassState => {
 export class Base extends Model {
   /** Table name. Defaults to a Rails-style pluralization of the class name. */
   static tableName: string | null = null;
-  /** Primary key column name. */
-  static primaryKey = 'id';
+  /**
+   * Primary key column name. May also be an array of names for composite
+   * primary keys (Rails 7.1+ behavior). When composite, `record.id` returns
+   * an array, and `find(value)` requires the array form `[v1, v2]`.
+   */
+  static primaryKey: string | readonly string[] = 'id';
+
+  /** Always-array view of the primary key. */
+  static primaryKeyColumns(): readonly string[] {
+    return typeof this.primaryKey === 'string' ? [this.primaryKey] : this.primaryKey;
+  }
+
+  /** True when the primary key is composite (more than one column). */
+  static get hasCompositePrimaryKey(): boolean {
+    return this.primaryKeyColumns().length > 1;
+  }
   /** Column name used for Single Table Inheritance dispatch. Default: `'type'`. */
   static inheritanceColumn = 'type';
   /** Prepended to the effective table name. e.g. `'app_'` → `app_users`. */
@@ -412,9 +457,12 @@ export class Base extends Model {
     return this._destroyed;
   }
 
-  /** ID (primary-key value) of this record. */
+  /** ID (primary-key value) of this record. Returns an array for composite PKs. */
   get id(): unknown {
-    return this.readAttribute((this.constructor as typeof Base).primaryKey);
+    const ctor = this.constructor as typeof Base;
+    const cols = ctor.primaryKeyColumns();
+    if (cols.length === 1) return this.readAttribute(cols[0]!);
+    return cols.map((c) => this.readAttribute(c));
   }
 
   // ──────────────────────────── class-level configuration ────────────────────────────
@@ -497,7 +545,7 @@ export class Base extends Model {
       name,
       classRef: options.class ?? null,
       foreignKey: options.foreignKey ?? (options.as ? `${options.as}_id` : inferredFk),
-      primaryKey: options.primaryKey ?? this.primaryKey,
+      primaryKey: options.primaryKey ?? this.primaryKeyColumns()[0]!,
       polymorphic: false,
       as: options.as,
       optional: true,
@@ -527,7 +575,7 @@ export class Base extends Model {
       name,
       classRef: options.class ?? null,
       foreignKey: options.foreignKey ?? (options.as ? `${options.as}_id` : inferredFk),
-      primaryKey: options.primaryKey ?? this.primaryKey,
+      primaryKey: options.primaryKey ?? this.primaryKeyColumns()[0]!,
       polymorphic: false,
       as: options.as,
       optional: true,
@@ -603,8 +651,12 @@ export class Base extends Model {
     if (this.abstractClass) return;
     const conn = this.connection();
     const cols = await conn.columns(this.effectiveTableName());
-    const pk = (await conn.primaryKey(this.effectiveTableName())) ?? this.primaryKey;
-    this.primaryKey = pk;
+    // Preserve explicit composite-PK declarations — only fall back to the
+    // adapter's reflection when the user hasn't overridden it.
+    if (!Array.isArray(this.primaryKey)) {
+      const pk = (await conn.primaryKey(this.effectiveTableName())) ?? this.primaryKey;
+      this.primaryKey = pk;
+    }
     for (const col of cols) this.attributeFromColumn(col);
     getState(this).schemaLoaded = true;
   }
@@ -830,7 +882,7 @@ export class Base extends Model {
 
   static async exists<This extends typeof Base>(
     this: This,
-    input?: WhereInput<InstanceType<This>>,
+    input?: WhereInput<InstanceType<This>> | number | string | bigint,
   ): Promise<boolean> {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).exists(input);
   }
@@ -1037,7 +1089,7 @@ export class Base extends Model {
     ids: unknown | readonly unknown[],
   ): Promise<number> {
     const list = Array.isArray(ids) ? (ids as readonly unknown[]) : [ids];
-    return (this as unknown as typeof Base).deleteAll({ [this.primaryKey]: list } as never);
+    return (this as unknown as typeof Base).deleteAll({ [this.primaryKeyColumns()[0]!]: list } as never);
   }
 
   static async transaction<T>(
@@ -1120,10 +1172,8 @@ export class Base extends Model {
     await ctor.runCallbacks('destroy', this, async () => {
       if (this._persisted) {
         const table = ctor.arelTable();
-        const pk = ctor.primaryKey;
         const dm = new Arel.DeleteManager(table);
-        const id = this.readAttribute(pk);
-        dm.where(table.attribute(pk).equal(new ArelNodes.BindParam(id as never)));
+        dm.where(primaryKeyMatcher(ctor, table, this));
         const [sql, binds] = ctor.connection().toSql(dm);
         await ctor.connection().exec(sql, binds);
       }
@@ -1141,13 +1191,13 @@ export class Base extends Model {
   async lockOrThrow(lockClause: string | true = true): Promise<this> {
     const ctor = this.constructor as typeof Base;
     if (ctor.connection() == null) throw new Error('No connection established');
-    const id = this.readAttribute(ctor.primaryKey);
-    if (id == null) throw new RecordNotFound(`Cannot lock an unsaved ${ctor.name}`);
+    const conditions = primaryKeyConditions(ctor, this);
+    if (conditions == null) throw new RecordNotFound(`Cannot lock an unsaved ${ctor.name}`);
     const row = await new Relation(ctor as unknown as BaseConstructor<this>)
-      .where({ [ctor.primaryKey]: id } as never)
+      .where(conditions as never)
       .lock(lockClause)
       .take();
-    if (!row) throw new RecordNotFound(`Couldn't find ${ctor.name} with ${ctor.primaryKey}=${String(id)}`);
+    if (!row) throw new RecordNotFound(`Couldn't find ${ctor.name} matching ${JSON.stringify(conditions)}`);
     // biome-ignore lint/suspicious/noExplicitAny: protected hydrate
     (this as any)._attributes.hydrate((row as Base).attributes());
     return this;
@@ -1169,12 +1219,10 @@ export class Base extends Model {
   /** Re-read from the DB, replacing any in-memory changes. */
   async reload(): Promise<this> {
     const ctor = this.constructor as typeof Base;
-    const id = this.readAttribute(ctor.primaryKey);
-    if (id === null || id === undefined) {
-      throw new RecordNotFound(`Cannot reload an unsaved ${ctor.name}`);
-    }
-    const row = await new Relation(ctor as unknown as BaseConstructor<this>).findBy({ [ctor.primaryKey]: id } as never);
-    if (!row) throw new RecordNotFound(`Couldn't find ${ctor.name} with ${ctor.primaryKey}=${String(id)}`);
+    const conditions = primaryKeyConditions(ctor, this);
+    if (conditions == null) throw new RecordNotFound(`Cannot reload an unsaved ${ctor.name}`);
+    const row = await new Relation(ctor as unknown as BaseConstructor<this>).findBy(conditions as never);
+    if (!row) throw new RecordNotFound(`Couldn't find ${ctor.name} matching ${JSON.stringify(conditions)}`);
     // biome-ignore lint/suspicious/noExplicitAny: protected field rehydration
     (this as any)._attributes.hydrate(row.attributes());
     return this;
@@ -1187,7 +1235,9 @@ export class Base extends Model {
    */
   override dup(): this {
     const copy = super.dup();
-    copy.writeAttribute((this.constructor as typeof Base).primaryKey, null);
+    for (const pk of (this.constructor as typeof Base).primaryKeyColumns()) {
+      copy.writeAttribute(pk, null);
+    }
     // biome-ignore lint/suspicious/noExplicitAny: protected fields
     (copy as any)._persisted = false;
     return copy;
@@ -1270,11 +1320,13 @@ export class Base extends Model {
 
     const im = new Arel.InsertManager(table);
     const pairs: Array<[ArelAttribute, BindParamNode]> = [];
+    const pkSet = new Set(ctor.primaryKeyColumns());
     for (const def of schema) {
-      // Skip the primary key when its value is null/undefined so the DB can auto-generate it.
+      // Skip primary-key columns whose value is null/undefined so the DB
+      // can auto-generate them (single-PK auto-increment, composite-PK
+      // with sequences / explicit values).
       const current = this.readAttribute(def.name);
-      const isPk = def.name === ctor.primaryKey;
-      if (isPk && (current === null || current === undefined)) continue;
+      if (pkSet.has(def.name) && (current === null || current === undefined)) continue;
       const serialized = def.type.serialize(current as never);
       pairs.push([table.attribute(def.name), new ArelNodes.BindParam(serialized as never)]);
     }
@@ -1285,7 +1337,7 @@ export class Base extends Model {
       // Most dialects accept `()` empty values list; SQLite accepts DEFAULT VALUES.
       const [sqlEmpty] = conn.toSql(new Arel.InsertManager(table).into(table));
       const result = await conn.exec(sqlEmpty);
-      this.captureInsertResult(result, ctor.primaryKey);
+      this.captureInsertResult(result, ctor.primaryKeyColumns()[0]!);
       return;
     }
 
@@ -1293,7 +1345,7 @@ export class Base extends Model {
     let [sql, binds] = conn.toSql(im);
     if (conn.adapterName !== 'mysql' && !/\breturning\b/i.test(sql)) sql = `${sql} RETURNING *`;
     const result = await conn.exec(sql, binds);
-    this.captureInsertResult(result, ctor.primaryKey);
+    this.captureInsertResult(result, ctor.primaryKeyColumns()[0]!);
   }
 
   /** Apply the result of an INSERT — hydrate from RETURNING or backfill from lastInsertId. */
@@ -1327,8 +1379,7 @@ export class Base extends Model {
       assignments[name] = new ArelNodes.BindParam(serialized as never);
     }
     um.set(assignments as never);
-    const id = this.readAttribute(ctor.primaryKey);
-    um.where(table.attribute(ctor.primaryKey).equal(new ArelNodes.BindParam(id as never)));
+    um.where(primaryKeyMatcher(ctor, table, this));
     const [sql, binds] = conn.toSql(um);
     await conn.exec(sql, binds);
     // biome-ignore lint/suspicious/noExplicitAny: protected field

@@ -56,3 +56,4 @@ export {
   type Type,
 } from './Type';
 export { camelize, pluralize, tableize, underscore } from './inflector';
+export { Name } from './Name';

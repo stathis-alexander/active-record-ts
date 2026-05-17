@@ -109,6 +109,9 @@ const definePerAttributeDirty = (target: typeof Model, names: string[]): void =>
       [`restore${suffix}`](this: Model) {
         this.writeAttribute(name, this.attributeWas(name));
       },
+      [`${camelName}WillChange`](this: Model) {
+        this.willChange(name);
+      },
       [`${camelName}PreviouslyChanged`](this: Model): boolean {
         return Object.prototype.hasOwnProperty.call(this.savedChanges(), name);
       },
@@ -135,6 +138,18 @@ const lowerFirst = (s: string): string => (s.length === 0 ? s : s.charAt(0).toLo
 const defineAccessors = (target: typeof Model, names: string[]): void => {
   for (const name of names) {
     if (Object.prototype.hasOwnProperty.call(target.prototype, name)) continue;
+    // Don't shadow an existing getter/setter inherited from an ancestor —
+    // e.g. `Base#id` is a composite-aware getter on Base.prototype and
+    // we shouldn't override it with a per-attribute accessor that always
+    // reads the single `id` column.
+    let proto: object | null = Object.getPrototypeOf(target.prototype);
+    let inheritedAccessor = false;
+    while (proto) {
+      const desc = Object.getOwnPropertyDescriptor(proto, name);
+      if (desc && (desc.get || desc.set)) { inheritedAccessor = true; break; }
+      proto = Object.getPrototypeOf(proto);
+    }
+    if (inheritedAccessor) continue;
     Object.defineProperty(target.prototype, name, {
       configurable: true,
       enumerable: true,
@@ -204,6 +219,15 @@ export class Model {
   savedChanges(): Record<string, [unknown, unknown]> {
     return this._attributes.savedChanges();
   }
+  /**
+   * Tell the dirty tracker that `name` is about to be mutated in place,
+   * so subsequent reads detect it as a change. Mirrors Rails'
+   * `name_will_change!`.
+   */
+  willChange(name: string): void {
+    this._attributes.willChange(name);
+  }
+
   /**
    * Revert pending changes. With no argument restores every changed
    * attribute; with `names` restores only the listed ones. Mirrors

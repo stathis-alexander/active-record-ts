@@ -522,7 +522,9 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   async find(id: unknown): Promise<T>;
   async find(...ids: unknown[]): Promise<T[]>;
   async find(idOrIds: unknown, ...rest: unknown[]): Promise<T | T[]> {
-    const pk = this.klass.primaryKey;
+    // Composite PK: callers should use findBy({...}) instead.
+    const pkCols = (this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns();
+    const pk = pkCols[0]!;
     // Normalize argument forms: find(1) | find([1, 2]) | find(1, 2, 3)
     const ids = Array.isArray(idOrIds) ? (idOrIds as unknown[]) : [idOrIds, ...rest];
     if (ids.length === 0) throw new RecordNotFound(`Couldn't find ${this.klass.name} without an ID`);
@@ -547,9 +549,16 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return (row as T) ?? null;
   }
 
-  async exists(input?: WhereInput<T>): Promise<boolean> {
+  async exists(input?: WhereInput<T> | number | string | bigint): Promise<boolean> {
     let scope: Relation<T> = this;
-    if (input !== undefined) scope = this.where(input);
+    if (input !== undefined) {
+      if (typeof input === 'number' || typeof input === 'bigint' || typeof input === 'string') {
+        const pk = (this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!;
+        scope = this.where({ [pk]: input } as WhereInput<T>);
+      } else {
+        scope = this.where(input);
+      }
+    }
     const rows = await scope.limit(1).toArray();
     return rows.length > 0;
   }
@@ -631,7 +640,7 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   }
 
   async ids(): Promise<unknown[]> {
-    return this.pluck(this.klass.primaryKey);
+    return this.pluck((this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!);
   }
 
   /**
@@ -644,7 +653,7 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
    */
   async *inBatches(options: { of?: number; start?: unknown } = {}): AsyncIterableIterator<T[]> {
     const size = options.of ?? 1000;
-    const pk = this.klass.primaryKey;
+    const pk = (this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!;
     let cursor: unknown = options.start ?? null;
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -685,12 +694,12 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   /** When no order is set, fall back to ordering by primary key for first/last stability. */
   private defaultOrderFallback(): Expression[] {
     if (this.state.orderValues.length > 0) return [];
-    return [this.attr(this.klass.primaryKey).asc()];
+    return [this.attr((this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!).asc()];
   }
 
   /** Compute the reversed order expressions for `last`. */
   private reverseOrders(): Expression[] {
-    if (this.state.orderValues.length === 0) return [this.attr(this.klass.primaryKey).desc()];
+    if (this.state.orderValues.length === 0) return [this.attr((this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!).desc()];
     return this.state.orderValues.map((o) => {
       if (typeof o === 'object' && o !== null && 'reverse' in o && typeof (o as { reverse: () => Expression }).reverse === 'function') {
         return (o as { reverse: () => Expression }).reverse();

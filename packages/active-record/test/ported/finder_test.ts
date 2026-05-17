@@ -177,7 +177,10 @@ describe('Finder — exists', () => {
     expect(await Topic.exists()).toBe(false);
   });
 
-  test.skip('exists with id argument (TODO: exists(id))', () => {});
+  test('exists(id) looks up by primary key', async () => {
+    expect(await Topic.exists(1)).toBe(true);
+    expect(await Topic.exists(999)).toBe(false);
+  });
   test.skip('exists with string condition (TODO: raw sql arg)', () => {});
   test.skip('exists with order (TODO)', () => {});
   test.skip('exists with distinct + offset + joins (TODO: joins)', () => {});

@@ -72,7 +72,13 @@ describe('Dirty', () => {
     expect(model.attributeChanged('name')).toBe(true);
   });
 
-  test.skip('attribute mutation — `name_will_change!` (TODO: mutate-then-mark)', () => {});
+  test('attribute mutation — `nameWillChange()` marks attribute dirty after in-place mutation', () => {
+    type Helpers = { nameWillChange: () => void };
+    // Initial value is null; trigger willChange to mark current as the "after".
+    (model as unknown as Helpers).nameWillChange();
+    model.name = 'Baal';
+    expect(model.attributeChanged('name')).toBe(true);
+  });
 
   test('resetting attribute — `restoreName()`', () => {
     model.name = 'Bob';
@@ -153,7 +159,11 @@ describe('Dirty', () => {
     expect(model.attributeWas('name')).toBe('Otto');
   });
 
-  test.skip('attribute_will_change! with a symbol (TODO: will_change!)', () => {});
+  test('willChange("name") on the Model directly', () => {
+    model.willChange('name');
+    model.name = 'Baal';
+    expect(model.attributeChanged('name')).toBe(true);
+  });
 
   test('clear_changes_information resets all changes', () => {
     model.name = 'Dmitry';

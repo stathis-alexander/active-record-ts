@@ -119,7 +119,32 @@ describe('Persistence — create / save / update / destroy', () => {
 
   test.skip('populates non-primary-key autoincremented column (TODO: returning multi-pk)', () => {});
   test.skip('autoincrement regardless of column order (TODO)', () => {});
-  test.skip('composite primary key autoincrement (TODO: cpk)', () => {});
+  test('composite primary key: insert + reload + destroy all keyed on both columns', async () => {
+    const { Base: B } = await import('../../src');
+    class Composite extends B {
+      static override tableName = 'memberships';
+      declare user_id: number;
+      declare team_id: number;
+    }
+    // Set after the class declaration so TS doesn't widen the tuple to string[].
+    Composite.primaryKey = ['user_id', 'team_id'];
+    Composite.useConnection(fx.adapter);
+    await Composite.loadSchema();
+
+    const c = new Composite({ user_id: 1, team_id: 2 });
+    await c.save();
+    expect(c.persisted).toBe(true);
+    expect(c.id).toEqual([1, 2]);
+
+    const found = await Composite.findBy({ user_id: 1, team_id: 2 });
+    expect(found?.id).toEqual([1, 2]);
+
+    await c.reload();
+    expect(c.id).toEqual([1, 2]);
+
+    await c.destroy();
+    expect(await Composite.count()).toBe(0);
+  });
   test.skip('update_many / update_many! (TODO: batch update by id)', () => {});
   test.skip('update_many with array of records (TODO)', () => {});
   test.skip('class-level update without ids (TODO)', () => {});
