@@ -60,7 +60,21 @@ describe('BasicsTest — table name guessing', () => {
     expect(Widget.effectiveTableName()).toBe('app_posts_v2');
   });
   test.skip('test_singular_table_name_guesses (TODO: singular tables)', () => {});
-  test.skip('test_table_name_for_base_class (TODO: abstract class)', () => {});
+  test('abstract class skips schema load and inherits config to subclasses', async () => {
+    class AbstractBase extends Topic {
+      static override abstractClass = true;
+    }
+    AbstractBase.useConnection(fx.adapter);
+    // Should not throw — schema load is a no-op for abstract classes.
+    await AbstractBase.loadSchema();
+    expect(AbstractBase.abstractClass).toBe(true);
+    // A concrete subclass can still use the same connection chain.
+    class Concrete extends AbstractBase {
+      static override tableName = 'topics';
+    }
+    await Concrete.loadSchema();
+    expect(Concrete.attributesSchema().has('title')).toBe(true);
+  });
 });
 
 describe('BasicsTest — finders + persistence', () => {

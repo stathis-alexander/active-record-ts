@@ -100,7 +100,14 @@ describe('AttributeSet', () => {
 
   test.skip('freezing doesn\'t prevent materialization (TODO: frozen)', () => {});
   test.skip('marshalling dump/load (TODO: marshalling)', () => {});
-  test.skip('accessed_attributes returns read ones (TODO: accessed tracking)', () => {});
+  test('accessed() returns only attributes that have been read', () => {
+    const set = buildSet({ foo: { type: 'integer' }, bar: { type: 'integer' } });
+    const attrs = new Attributes(set);
+    attrs.hydrate({ foo: 1, bar: 2 });
+    expect(attrs.accessed()).toEqual([]);
+    void attrs.read('foo');
+    expect(attrs.accessed()).toEqual(['foo']);
+  });
   test.skip('map returns a new set with changes (TODO: map)', () => {});
   test.skip('comparison for equality (TODO: equality)', () => {});
   test.skip('==(other) safe with any instance (TODO)', () => {});

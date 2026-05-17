@@ -38,6 +38,10 @@ export class ErrorObject {
   fullMessage(): string {
     return this.entry.attribute === BASE ? this.entry.message : `${humanize(this.entry.attribute)} ${this.entry.message}`;
   }
+  /** Internal accessor for `Errors#import` — returns the wrapped entry. */
+  toEntry(): ErrorEntry {
+    return this.entry;
+  }
 }
 
 /** Special attribute name for errors that aren't tied to a specific column. */
@@ -271,6 +275,43 @@ export class Errors {
   /** Indifferent indexer — `errors.get('name')` is equivalent to `errors.on('name')`. */
   get(attribute: string): string[] {
     return this.on(attribute);
+  }
+
+  /**
+   * Remove duplicate entries — same attribute + message + type. Mirrors
+   * Rails' `errors.uniq!`.
+   */
+  uniq(): this {
+    const seen = new Set<string>();
+    for (let i = this.entries.length - 1; i >= 0; i--) {
+      const e = this.entries[i]!;
+      const key = `${e.attribute} ${e.message} ${e.type ?? ''}`;
+      if (seen.has(key)) this.entries.splice(i, 1);
+      else seen.add(key);
+    }
+    return this;
+  }
+
+  /** Import a foreign `ErrorEntry` or `ErrorObject`, optionally overriding attribute/type. */
+  import(
+    error: ErrorEntry | ErrorObject,
+    overrides: { attribute?: string; type?: string } = {},
+  ): ErrorEntry {
+    const base: ErrorEntry = error instanceof ErrorObject ? error.toEntry() : error;
+    const next: ErrorEntry = {
+      attribute: overrides.attribute ?? base.attribute,
+      message: base.message,
+      type: overrides.type ?? base.type,
+      options: base.options ? { ...base.options } : undefined,
+    };
+    this.entries.push(next);
+    return next;
+  }
+
+  /** Debug-friendly string representation. */
+  inspect(): string {
+    const parts = this.entries.map((e) => `#<Error attribute=${e.attribute}, message=${JSON.stringify(e.message)}>`);
+    return `#<Errors:[${parts.join(', ')}]>`;
   }
 
   get count(): number {

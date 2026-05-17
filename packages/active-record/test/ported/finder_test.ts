@@ -69,7 +69,10 @@ describe('Finder — find by id', () => {
     expect(batches.flat().sort()).toEqual(['first', 'second', 'third']);
   });
 
-  test.skip('find with string id (TODO: numeric-coercion of string ids)', () => {});
+  test('find with a numeric string id (driver coerces both ways)', async () => {
+    const t = await Topic.find('1' as unknown as number);
+    expect(t.readAttribute('title')).toBe('first');
+  });
 
   test('dynamic finder findByTitle returns matching record', async () => {
     const t = await (Topic as unknown as { findByTitle: (v: unknown) => Promise<Topic | null> }).findByTitle('second');

@@ -7,6 +7,7 @@ import type { ConnectionAdapter } from './ConnectionAdapter';
 import type { MigrationConstructor } from './Migration';
 
 const TABLE = 'schema_migrations';
+const METADATA_TABLE = 'ar_internal_metadata';
 
 export class Migrator {
   constructor(private readonly adapter: ConnectionAdapter, private readonly migrations: MigrationConstructor[]) {}
@@ -16,6 +17,45 @@ export class Migrator {
     const quoted = this.adapter.quoteIdentifier(TABLE);
     const quotedCol = this.adapter.quoteIdentifier('version');
     await this.adapter.exec(`CREATE TABLE IF NOT EXISTS ${quoted} (${quotedCol} VARCHAR(255) PRIMARY KEY)`);
+  }
+
+  /** Ensure the ar_internal_metadata tracking table exists. */
+  async ensureMetadataTable(): Promise<void> {
+    const quoted = this.adapter.quoteIdentifier(METADATA_TABLE);
+    await this.adapter.exec(
+      `CREATE TABLE IF NOT EXISTS ${quoted} (` +
+        `${this.adapter.quoteIdentifier('key')} VARCHAR(255) PRIMARY KEY, ` +
+        `${this.adapter.quoteIdentifier('value')} TEXT` +
+        `)`,
+    );
+  }
+
+  /** Read a metadata value (e.g. `environment`). */
+  async getMetadata(key: string): Promise<string | null> {
+    await this.ensureMetadataTable();
+    const quoted = this.adapter.quoteIdentifier(METADATA_TABLE);
+    const placeholder = this.placeholder(1);
+    const rows = await this.adapter.execute(
+      `SELECT ${this.adapter.quoteIdentifier('value')} AS v FROM ${quoted} WHERE ${this.adapter.quoteIdentifier('key')} = ${placeholder}`,
+      [key],
+    );
+    return rows.length > 0 ? ((rows[0] as { v: string | null }).v ?? null) : null;
+  }
+
+  /** Upsert a metadata entry — used by Rails to record the current environment. */
+  async setMetadata(key: string, value: string): Promise<void> {
+    await this.ensureMetadataTable();
+    const quoted = this.adapter.quoteIdentifier(METADATA_TABLE);
+    const keyCol = this.adapter.quoteIdentifier('key');
+    const valCol = this.adapter.quoteIdentifier('value');
+    const phA = this.placeholder(1);
+    const phB = this.placeholder(2);
+    const existing = await this.getMetadata(key);
+    if (existing === null) {
+      await this.adapter.exec(`INSERT INTO ${quoted} (${keyCol}, ${valCol}) VALUES (${phA}, ${phB})`, [key, value]);
+    } else {
+      await this.adapter.exec(`UPDATE ${quoted} SET ${valCol} = ${phA} WHERE ${keyCol} = ${phB}`, [value, key]);
+    }
   }
 
   /** All applied migration versions, sorted. */

@@ -382,6 +382,12 @@ export class Base extends Model {
   static tablePrefix = '';
   /** Appended to the effective table name. e.g. `'_v2'` → `users_v2`. */
   static tableSuffix = '';
+  /**
+   * Mark a class abstract — it has no table of its own and won't try to
+   * load a schema. Subclasses inherit configuration but resolve their own
+   * `effectiveTableName()`. Matches Rails' `self.abstract_class = true`.
+   */
+  static abstractClass = false;
 
   /** True after `save` has been called and succeeded at least once. */
   declare protected _persisted: boolean;
@@ -594,6 +600,7 @@ export class Base extends Model {
 
   /** Reflect columns from the DB and register attributes. */
   static async loadSchema(): Promise<void> {
+    if (this.abstractClass) return;
     const conn = this.connection();
     const cols = await conn.columns(this.effectiveTableName());
     const pk = (await conn.primaryKey(this.effectiveTableName())) ?? this.primaryKey;

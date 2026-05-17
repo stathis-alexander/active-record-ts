@@ -64,6 +64,7 @@ export class Attributes {
   private readonly current = new Map<string, unknown>();
   private readonly original = new Map<string, unknown>();
   private previousChanges: Map<string, [unknown, unknown]> = new Map();
+  private readonly accessedNames = new Set<string>();
 
   constructor(private readonly set: AttributeSet) {}
 
@@ -90,7 +91,13 @@ export class Attributes {
 
   /** Read an attribute by name, returning the canonical (cast) value. */
   read(name: string): unknown {
+    this.accessedNames.add(name);
     return this.current.get(name);
+  }
+
+  /** Names that have been read since hydration. Mirrors Rails' `accessed_attributes`. */
+  accessed(): string[] {
+    return [...this.accessedNames].filter((n) => this.set.has(n));
   }
 
   /** Write an attribute by name. Type-casts before storing. */
