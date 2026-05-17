@@ -251,7 +251,14 @@ describe('Migration — DSL: addIndex / removeIndex', () => {
 });
 
 describe('Migration — Rails-only / deferred', () => {
-  test.skip('internal_metadata table stores environment (TODO: internal_metadata)', () => {});
+  test('internal_metadata stores and retrieves the environment', async () => {
+    const m = new Migrator(adapter, []);
+    expect(await m.getMetadata('environment')).toBeNull();
+    await m.setMetadata('environment', 'test');
+    expect(await m.getMetadata('environment')).toBe('test');
+    await m.setMetadata('environment', 'production');
+    expect(await m.getMetadata('environment')).toBe('production');
+  });
   test.skip('schema_migration_create_table_wont_be_affected_by_schema_cache (TODO: schema cache)', () => {});
   test.skip('migration_context_with_default_schema_migration (TODO: MigrationContext)', () => {});
   test.skip('migrator_versions enumeration (TODO: ensure parity)', () => {});

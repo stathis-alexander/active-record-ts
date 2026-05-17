@@ -64,6 +64,7 @@ export class Attributes {
   private readonly current = new Map<string, unknown>();
   private readonly original = new Map<string, unknown>();
   private previousChanges: Map<string, [unknown, unknown]> = new Map();
+  private readonly accessedNames = new Set<string>();
 
   constructor(private readonly set: AttributeSet) {}
 
@@ -90,7 +91,13 @@ export class Attributes {
 
   /** Read an attribute by name, returning the canonical (cast) value. */
   read(name: string): unknown {
+    this.accessedNames.add(name);
     return this.current.get(name);
+  }
+
+  /** Names that have been read since hydration. Mirrors Rails' `accessed_attributes`. */
+  accessed(): string[] {
+    return [...this.accessedNames].filter((n) => this.set.has(n));
   }
 
   /** Write an attribute by name. Type-casts before storing. */
@@ -101,6 +108,25 @@ export class Attributes {
       return;
     }
     this.current.set(name, def.type.cast(value));
+  }
+
+  /**
+   * Explicitly mark `name` as having been mutated in place — without
+   * actually writing a new value. Mirrors Rails' `name_will_change!`
+   * which captures the current value into the original snapshot for
+   * later mutation detection.
+   */
+  willChange(name: string): void {
+    if (!this.current.has(name) && !this.original.has(name)) return;
+    // The next read sees the current value as "the new value"; rewind
+    // original to a snapshot taken BEFORE further mutation.
+    const value = this.current.get(name);
+    // Stash a deep-ish copy of the current value as the original so subsequent
+    // in-place mutation to `current` is detectable as a change.
+    const snapshot = typeof value === 'object' && value !== null
+      ? (Array.isArray(value) ? [...value] : { ...value })
+      : value;
+    this.original.set(name, snapshot);
   }
 
   /** Was this attribute changed since the last commit? */

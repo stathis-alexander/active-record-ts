@@ -42,15 +42,51 @@ describe('Naming — inflector', () => {
     expect(tableize('Person')).toBe('people');
   });
 
-  test.skip('Name#singular (TODO: Name class)', () => {});
-  test.skip('Name#plural (TODO: Name class)', () => {});
-  test.skip('Name#element (TODO: Name class)', () => {});
-  test.skip('Name#collection (TODO: Name class)', () => {});
-  test.skip('Name#human (TODO: Name#human)', () => {});
-  test.skip('Name#route_key (TODO: routing helpers)', () => {});
-  test.skip('Name#param_key (TODO: routing helpers)', () => {});
-  test.skip('Name#i18n_key (TODO: i18n)', () => {});
-  test.skip('Name#uncountable? (TODO)', () => {});
+  test('Name#singular', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').singular).toBe('post_track_back');
+  });
+  test('Name#plural', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').plural).toBe('post_track_backs');
+  });
+  test('Name#element', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').element).toBe('track_back');
+  });
+  test('Name#collection', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').collection).toBe('post/track_backs');
+  });
+  test('Name#human', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').human).toBe('Track back');
+  });
+  test('Name#route_key', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').route_key).toBe('post_track_backs');
+  });
+  test('Name#param_key', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').param_key).toBe('post_track_back');
+  });
+  test('Name#i18n_key', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').i18n_key).toBe('post/track_back');
+  });
+  test('Name#uncountable', async () => {
+    const { Name } = await import('../../src');
+    expect(new Name('Post::TrackBack').uncountable).toBe(false);
+    expect(new Name('Sheep').uncountable).toBe(true);
+  });
 
-  test.skip('namespaced model: Blog::Post (TODO: namespacing)', () => {});
+  test('namespaced model: Blog::Post', async () => {
+    const { Name } = await import('../../src');
+    const n = new Name('Blog::Post');
+    expect(n.singular).toBe('blog_post');
+    expect(n.plural).toBe('blog_posts');
+    expect(n.element).toBe('post');
+    expect(n.collection).toBe('blog/posts');
+    expect(n.human).toBe('Post');
+  });
 });

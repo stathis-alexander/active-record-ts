@@ -69,7 +69,10 @@ describe('Finder — find by id', () => {
     expect(batches.flat().sort()).toEqual(['first', 'second', 'third']);
   });
 
-  test.skip('find with string id (TODO: numeric-coercion of string ids)', () => {});
+  test('find with a numeric string id (driver coerces both ways)', async () => {
+    const t = await Topic.find('1' as unknown as number);
+    expect(t.readAttribute('title')).toBe('first');
+  });
 
   test('dynamic finder findByTitle returns matching record', async () => {
     const t = await (Topic as unknown as { findByTitle: (v: unknown) => Promise<Topic | null> }).findByTitle('second');
@@ -174,7 +177,10 @@ describe('Finder — exists', () => {
     expect(await Topic.exists()).toBe(false);
   });
 
-  test.skip('exists with id argument (TODO: exists(id))', () => {});
+  test('exists(id) looks up by primary key', async () => {
+    expect(await Topic.exists(1)).toBe(true);
+    expect(await Topic.exists(999)).toBe(false);
+  });
   test.skip('exists with string condition (TODO: raw sql arg)', () => {});
   test.skip('exists with order (TODO)', () => {});
   test.skip('exists with distinct + offset + joins (TODO: joins)', () => {});

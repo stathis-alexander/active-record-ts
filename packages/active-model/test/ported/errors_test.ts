@@ -392,10 +392,38 @@ describe('Errors', () => {
     expect(person.errors.attributeNames).toEqual(['email']);
   });
 
-  test.skip('import wraps as NestedError (TODO: NestedError)', () => {});
+  test('import absorbs a foreign error entry', () => {
+    const source = new Errors();
+    source.add('name', 'invalid');
+    const target = new Errors();
+    const imported = target.import(source.objects[0]!);
+    expect(target.attributeNames).toEqual(['name']);
+    // 'invalid' is a known symbol type → message becomes "is invalid"
+    expect(imported.message).toBe('is invalid');
+  });
+
+  test('import with attribute override', () => {
+    const source = new Errors();
+    source.add('name', 'invalid');
+    const target = new Errors();
+    target.import(source.objects[0]!, { attribute: 'age' });
+    expect(target.attributeNames).toEqual(['age']);
+  });
   test.skip('errors are marshalable (TODO: marshal not applicable)', () => {});
   test.skip('YAML compatibility with Rails 6.x (TODO: not applicable)', () => {});
   test.skip('to_hash with full_messages flag (TODO)', () => {});
-  test.skip('uniq! removes duplicates (TODO)', () => {});
-  test.skip('inspect format (TODO)', () => {});
+  test('uniq removes duplicates', () => {
+    const errors = new Errors();
+    errors.add('name', 'invalid');
+    errors.add('name', 'invalid');
+    expect(errors.size).toBe(2);
+    errors.uniq();
+    expect(errors.size).toBe(1);
+  });
+
+  test('inspect returns a debug-friendly string', () => {
+    const errors = new Errors();
+    errors.add('base', 'something happened');
+    expect(errors.inspect()).toMatch(/Errors:.*attribute=base/);
+  });
 });
