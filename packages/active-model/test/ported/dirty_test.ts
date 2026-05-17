@@ -62,9 +62,7 @@ describe('Dirty', () => {
     expect((model as unknown as { nameChange: () => [unknown, unknown] | null }).nameChange()).toEqual([null, 'Ringo']);
   });
 
-  test.skip('changes accessible through strings and symbols (N/A: TS uses string keys)', () => {});
-
-  test('consistent symbols arguments after the changes are applied', () => {
+test('consistent symbols arguments after the changes are applied', () => {
     model.name = 'David';
     expect(model.attributeChanged('name')).toBe(true);
     model.commitChanges();

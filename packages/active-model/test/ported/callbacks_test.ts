@@ -111,8 +111,6 @@ describe('Callbacks', () => {
   test.skip('only with array (TODO)', () => {});
   test.skip('only with empty array (TODO)', () => {});
 
-  test.skip('the :if option array should not be mutated (TODO: option immutability)', () => {});
 
   test.skip('after_create callbacks with both callbacks declared in one line (TODO: multi-arg register)', () => {});
-  test.skip('after_create callbacks with both callbacks declared in different lines (covered by complete chain)', () => {});
 });

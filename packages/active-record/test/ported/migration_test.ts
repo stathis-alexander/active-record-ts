@@ -259,9 +259,6 @@ describe('Migration — Rails-only / deferred', () => {
     await m.setMetadata('environment', 'production');
     expect(await m.getMetadata('environment')).toBe('production');
   });
-  test.skip('schema_migration_create_table_wont_be_affected_by_schema_cache (TODO: schema cache)', () => {});
-  test.skip('migration_context_with_default_schema_migration (TODO: MigrationContext)', () => {});
-  test.skip('migrator_versions enumeration (TODO: ensure parity)', () => {});
   test('name_collision_across_dbs: same model class can target different DBs in different scopes', async () => {
     const { Base, SQLiteAdapter } = await import('../../src');
     const dbA = new SQLiteAdapter({ adapter: 'sqlite', database: ':memory:' });

@@ -140,5 +140,4 @@ describe('Calculations — special', () => {
   test.skip('sum with from-clause (TODO)', () => {});
   test.skip('count with includes (TODO: includes)', () => {});
   test.skip('select_count_with_having (TODO)', () => {});
-  test.skip('count_with_block (TODO: ruby block count)', () => {});
 });

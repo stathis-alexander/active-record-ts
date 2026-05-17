@@ -61,7 +61,6 @@ describe('Validations', () => {
     expect(t.errors.count).toBe(2);
   });
 
-  test.skip('errors on base with symbol message (TODO: symbol-as-type)', () => {});
 
   test('errors on custom attribute', () => {
     const t = new Topic();
@@ -69,7 +68,6 @@ describe('Validations', () => {
     expect(t.errors.fullMessages).toEqual(['Foo bar is invalid']);
   });
 
-  test.skip('errors on custom attribute with symbol message (TODO: symbol)', () => {});
 
   test('errors empty after errors-on check', () => {
     const t = new Topic();
@@ -108,10 +106,6 @@ describe('Validations', () => {
     await new Topic().validate();
     expect(received).toBe(true);
   });
-  test.skip('validates :if array immutability (TODO)', () => {});
-  test.skip('invalid_validator raises NoMethodError (TODO: method-name validators)', () => {});
-  test.skip('invalid_options_to_validate raises ArgumentError (TODO: arg checking)', () => {});
-  test.skip('callback_options_to_validate ordering with :prepend (TODO)', () => {});
 
   test('errors_to_json — `errors.toJSON()` snapshot', async () => {
     Topic.validatesPresenceOf('title');

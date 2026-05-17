@@ -89,7 +89,6 @@ describe('Callbacks — halt semantics', () => {
     expect(d.persisted).toBe(false);
   });
 
-  test.skip('throw :abort halts (TODO: throw-based halt — we use return false)', () => {});
 
   test.skip('before_destroy returning false halts destroy (TODO: destroy halt parity)', () => {});
 });

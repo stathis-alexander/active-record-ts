@@ -222,7 +222,6 @@ describe('Errors', () => {
 
   test.skip('added? ignores callback option (TODO: callback options)', () => {});
   test.skip('added? ignores message option (TODO: drop message from match)', () => {});
-  test.skip('added? indifferent access (TODO: string vs symbol)', () => {});
 
   test('added? handles symbol-style type', () => {
     const person = new Person();
@@ -409,8 +408,6 @@ describe('Errors', () => {
     target.import(source.objects[0]!, { attribute: 'age' });
     expect(target.attributeNames).toEqual(['age']);
   });
-  test.skip('errors are marshalable (TODO: marshal not applicable)', () => {});
-  test.skip('YAML compatibility with Rails 6.x (TODO: not applicable)', () => {});
   test.skip('to_hash with full_messages flag (TODO)', () => {});
   test('uniq removes duplicates', () => {
     const errors = new Errors();

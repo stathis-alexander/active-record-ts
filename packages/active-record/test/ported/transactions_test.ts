@@ -86,7 +86,6 @@ describe('Transactions — nested with savepoints', () => {
     expect(titles).toEqual(['outer']);
   });
 
-  test.skip('joinable / inner-most transaction (TODO: opt-out savepoint)', () => {});
 });
 
 describe('Transactions — Rollback sentinel', () => {

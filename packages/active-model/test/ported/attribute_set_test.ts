@@ -48,8 +48,6 @@ describe('AttributeSet', () => {
   });
 
   test.skip('deep_dup duplicates each attribute (TODO)', () => {});
-  test.skip('freezing cloned set does not freeze original (TODO: frozen)', () => {});
-
   test('toHash returns the cast values', () => {
     const set = buildSet({ foo: { type: 'integer' }, bar: { type: 'float' } });
     const attrs = new Attributes(set);
@@ -98,8 +96,6 @@ describe('AttributeSet', () => {
     expect(attrs.serializedHash()).toEqual({ foo: 7 });
   });
 
-  test.skip('freezing doesn\'t prevent materialization (TODO: frozen)', () => {});
-  test.skip('marshalling dump/load (TODO: marshalling)', () => {});
   test('accessed() returns only attributes that have been read', () => {
     const set = buildSet({ foo: { type: 'integer' }, bar: { type: 'integer' } });
     const attrs = new Attributes(set);
@@ -108,9 +104,6 @@ describe('AttributeSet', () => {
     void attrs.read('foo');
     expect(attrs.accessed()).toEqual(['foo']);
   });
-  test.skip('map returns a new set with changes (TODO: map)', () => {});
-  test.skip('comparison for equality (TODO: equality)', () => {});
-  test.skip('==(other) safe with any instance (TODO)', () => {});
   test.skip('custom mutable type changed_in_place (TODO)', () => {});
 
   test('keys returns names in declaration order', () => {

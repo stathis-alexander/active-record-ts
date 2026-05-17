@@ -42,7 +42,6 @@ describe('BasicsTest — initialization', () => {
     expect(reloaded.readAttribute('title')).toBe('something');
   });
 
-  test.skip('test_create_after_initialize_with_block (TODO: block init)', () => {});
   test.skip('test_initialize_with_invalid_attribute (TODO: invalid-attribute raise)', () => {});
 });
 
@@ -116,8 +115,6 @@ describe('BasicsTest — finders + persistence', () => {
     // Strict identity isn't required (we return fresh instances)
   });
 
-  test.skip('test_find_by_slug (TODO: slug lookup)', () => {});
-  test.skip('test_out_of_range_slugs (TODO)', () => {});
 });
 
 describe('BasicsTest — attribute IO', () => {
@@ -128,11 +125,8 @@ describe('BasicsTest — attribute IO', () => {
   });
 
   test.skip('test_custom_mutator (TODO: per-attribute writer hook)', () => {});
-  test.skip('test_arel_attribute_normalization (TODO: aliased attributes)', () => {});
   test.skip('test_incomplete_schema_loading (TODO)', () => {});
-  test.skip('test_column_names_are_escaped (TODO)', () => {});
   test.skip('test_primary_key_with_no_id (TODO: composite/no PK)', () => {});
-  test.skip('test_many_mutations (TODO: mutation count parity)', () => {});
   test.skip('test_preserving_date_objects (TODO: date roundtrip)', () => {});
   test.skip('test_preserving_time_objects (TODO: time-zone awareness)', () => {});
   test.skip('test_utc_as_time_zone (TODO: tz config)', () => {});
@@ -192,7 +186,4 @@ describe('BasicsTest — readonly attrs / many other features', () => {
     const reloaded = await ReadonlyTitlePost.find(p.id);
     expect(reloaded.readAttribute('title')).toBe('set-once');
   });
-  test.skip('generated_association_methods_module_name (TODO: generated modules)', () => {});
-  test.skip('generated_relation_methods_module_name (TODO)', () => {});
-  test.skip('no_anonymous_modules (TODO)', () => {});
 });
