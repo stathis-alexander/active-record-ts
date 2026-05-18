@@ -123,7 +123,17 @@ describe('Relations — chainable', () => {
     expect(rows.map((r) => r.readAttribute('title'))).toEqual(['C', 'B', 'A']);
   });
 
-  test.skip('only/except (TODO: filter relation values)', () => {});
+  test('only keeps just the named clauses', async () => {
+    const rel = Topic.where({ author_name: 'one' }).order({ title: 'desc' }).limit(1).only('where');
+    const rows = await rel;
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.readAttribute('author_name')).toBe('one');
+  });
+
+  test('except drops the listed clauses', async () => {
+    const rows = await Topic.order({ title: 'desc' }).except('order');
+    expect(rows.length).toBe(3);
+  });
 
   test('scope: named scope registers as a static method', async () => {
     class Scoped extends Topic {}
@@ -152,17 +162,32 @@ describe('Relations — chainable', () => {
     const names = await scope.titles();
     expect(names.sort()).toEqual(['A', 'B', 'C']);
   });
-  test.skip('group + having (TODO: group/having combinations)', () => {});
+  test('group + having combination', async () => {
+    const result = await Topic.all().group('author_name').having(['COUNT(*) >= ?', 1]).count() as Map<unknown, number>;
+    expect(result.size).toBeGreaterThan(0);
+  });
 
   // joins / includes / preload covered in associations_test.ts now that the
   // surface exists — these slot-level skips remain for the more nuanced
   // variants we haven't implemented yet.
-  test.skip('left_outer_joins (TODO: LEFT OUTER variant)', () => {});
+  // left_outer_joins covered in associations_test.ts
   // references / eager_load now exposed — see annotate/references tests above
   // and the leftOuterJoins / eagerLoad cases in associations_test.ts.
 
-  test.skip('lock(:for_update) (TODO: locking SQL)', () => {});
-  test.skip('readonly (TODO: readonly relation)', () => {});
+  test('lock("FOR UPDATE") is chainable (SQLite suppresses the clause; PG/MySQL emit it)', async () => {
+    // SQLite's arel visitor intentionally drops lock fragments since SQLite
+    // doesn't support them. We verify the chain works and the relation
+    // resolves; rendered SQL is dialect-specific.
+    const rows = await Topic.all().lock('FOR UPDATE');
+    expect(rows.length).toBe(3);
+  });
+
+  test('lock(true) is chainable and defaults to FOR UPDATE-like semantics', async () => {
+    const rows = await Topic.all().lock();
+    expect(rows.length).toBe(3);
+  });
+
+  test.skip('readonly relation enforcement (TODO: prevent save on readonly records)', () => {});
 
   test('annotate appends a SQL comment to the query', async () => {
     const [sql] = Topic.annotate('reason: nightly job').toSql();

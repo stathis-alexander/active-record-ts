@@ -799,6 +799,13 @@ export class Base extends Model {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).where(input);
   }
 
+  static whereNot<This extends typeof Base>(
+    this: This,
+    input: WhereInput<InstanceType<This>>,
+  ): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).whereNot(input);
+  }
+
   static order<This extends typeof Base>(
     this: This,
     ...orders: Parameters<Relation<InstanceType<This>>['order']>
@@ -847,6 +854,10 @@ export class Base extends Model {
 
   static eagerLoad<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
     return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).eagerLoad(...names);
+  }
+
+  static from<This extends typeof Base>(this: This, value: string | Relation<Base>): Relation<InstanceType<This>> {
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).from(value);
   }
 
   static annotate<This extends typeof Base>(this: This, ...comments: string[]): Relation<InstanceType<This>> {

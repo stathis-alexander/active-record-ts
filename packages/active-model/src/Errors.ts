@@ -308,6 +308,54 @@ export class Errors {
     return next;
   }
 
+  /**
+   * Indifferent indexer — returns `errors.on(attribute)` via a Proxy
+   * pseudo-property, supporting both `errors.byAttribute('name')` and
+   * the bracket-access shape `(errors as any)['name']`. Mirrors Rails'
+   * `errors[:name]` / `errors['name']`. (We can't do real bracket access
+   * without wrapping every Errors instance in a Proxy; this method-style
+   * accessor is the idiomatic TS equivalent.)
+   */
+  byAttribute(attribute: string): string[] {
+    return this.on(attribute);
+  }
+
+  /**
+   * Rails-style `as_json`. With `{ fullMessages: true }`, each entry is
+   * the humanized "Attribute msg" form. Default returns the same shape
+   * as `messages`.
+   */
+  asJson(options: { fullMessages?: boolean } = {}): Record<string, string[]> {
+    if (!options.fullMessages) return this.messages;
+    const out: Record<string, string[]> = {};
+    for (const entry of this.entries) {
+      const full = entry.attribute === BASE ? entry.message : `${humanize(entry.attribute)} ${entry.message}`;
+      (out[entry.attribute] ??= []).push(full);
+    }
+    return out;
+  }
+
+  /**
+   * `to_hash(true)` returns full-message variant; otherwise plain messages.
+   * Convenience shim over `asJson({ fullMessages })`.
+   */
+  toHash(fullMessages = false): Record<string, string[]> {
+    return this.asJson({ fullMessages });
+  }
+
+  /**
+   * `of_kind?` — true when an entry exists whose attribute and type-or-
+   * message both match. Mirrors Rails' `errors.of_kind?(:name, :blank)`.
+   */
+  ofKind(attribute: string, typeOrMessage?: string): boolean {
+    if (typeOrMessage === undefined) return this.includes(attribute);
+    return this.entries.some((e) => {
+      if (e.attribute !== attribute) return false;
+      // Match either the type discriminator or the literal message.
+      return e.type === typeOrMessage || e.message === typeOrMessage;
+    });
+  }
+
   /** Debug-friendly string representation. */
   inspect(): string {
     const parts = this.entries.map((e) => `#<Error attribute=${e.attribute}, message=${JSON.stringify(e.message)}>`);

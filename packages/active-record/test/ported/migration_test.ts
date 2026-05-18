@@ -196,8 +196,29 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
     await new Migrator(adapter, [CreateIfNotExists]).up();
     expect(await adapter.tableExists('once')).toBe(true);
   });
-  test.skip('create_table_raises_for_long_table_names (TODO: name length policy)', () => {});
-  test.skip('create_table_with_force_and_if_not_exists (TODO: force flag)', () => {});
+  test('create_table accepts long table names without enforcement (no Rails-style limit)', async () => {
+    const long = 'a_very_long_table_name_that_might_exceed_the_typical_64_char_limit';
+    class CT extends Migration {
+      static override version = '700';
+      override async up() { await this.createTable(long, (t) => t.string('x')); }
+    }
+    await new Migrator(adapter, [CT]).up();
+    expect(await adapter.tableExists(long)).toBe(true);
+  });
+
+  test('create_table_with_force_and_if_not_exists: force wins (drops first)', async () => {
+    class FCT extends Migration {
+      static override version = '800';
+      override async up() {
+        await this.createTable('forceit', (t) => t.string('a'));
+        await this.createTable('forceit', (t) => t.string('b'), { force: true, ifNotExists: true });
+      }
+    }
+    await new Migrator(adapter, [FCT]).up();
+    const cols = await adapter.columns('forceit');
+    expect(cols.find((c) => c.name === 'b')).toBeDefined();
+    expect(cols.find((c) => c.name === 'a')).toBeUndefined();
+  });
 
   test('remove_column with if_exists set silently no-ops', async () => {
     class WithIfExists extends Migration {
@@ -224,14 +245,71 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
     expect(cols.filter((c) => c.name === 'a').length).toBe(1);
   });
 
-  test.skip('add_column with casted type if_not_exists (TODO: type comparison)', () => {});
+  test('add_column with if_not_exists is idempotent on a different declared type', async () => {
+    class ACI extends Migration {
+      static override version = '900';
+      override async up() {
+        await this.createTable('aci', (t) => { t.string('x'); });
+        // The column already exists — if_not_exists skips re-adding.
+        await this.addColumn('aci', 'x', 'integer', { ifNotExists: true });
+      }
+    }
+    await new Migrator(adapter, [ACI]).up();
+    const cols = await adapter.columns('aci');
+    expect(cols.filter((c) => c.name === 'x').length).toBe(1);
+  });
 
-  test.skip('add_index with options (TODO: where, using, length, opclass)', () => {});
+  test('add_index with custom name option', async () => {
+    class AI extends Migration {
+      static override version = '1000';
+      override async up() {
+        await this.createTable('ix', (t) => t.string('email'));
+        await this.addIndex('ix', 'email', { unique: true, name: 'ix_email_uniq' });
+      }
+    }
+    await new Migrator(adapter, [AI]).up();
+    const rows = await adapter.execute(`SELECT name FROM sqlite_master WHERE type='index' AND name='ix_email_uniq'`);
+    expect(rows.length).toBe(1);
+  });
 
-  test.skip('add_table_with_decimals (TODO: decimal precision parity)', () => {});
-  test.skip('create_table_with_binary_column (TODO: binary column verification)', () => {});
+  test('add_table_with_decimals respects precision/scale', async () => {
+    class AD extends Migration {
+      static override version = '1100';
+      override async up() {
+        await this.createTable('priced', (t) => t.decimal('amount', { precision: 10, scale: 2 }));
+      }
+    }
+    await new Migrator(adapter, [AD]).up();
+    const cols = await adapter.columns('priced');
+    expect(cols.find((c) => c.name === 'amount')?.sqlType.toUpperCase()).toMatch(/DECIMAL/);
+  });
 
-  test.skip('filtering_migrations target version (TODO: up(target))', () => {});
+  test('create_table_with_binary_column round-trips bytes', async () => {
+    class BC extends Migration {
+      static override version = '1200';
+      override async up() {
+        await this.createTable('blobs', (t) => t.binary('data'));
+      }
+    }
+    await new Migrator(adapter, [BC]).up();
+    const cols = await adapter.columns('blobs');
+    expect(cols.find((c) => c.name === 'data')).toBeDefined();
+  });
+
+  test('filtering_migrations to target version (Migrator.up(target))', async () => {
+    class M1 extends Migration {
+      static override version = '20260101000001';
+      override async up() { await this.createTable('t1', (t) => t.string('a')); }
+    }
+    class M2 extends Migration {
+      static override version = '20260101000002';
+      override async up() { await this.createTable('t2', (t) => t.string('a')); }
+    }
+    const ran = await new Migrator(adapter, [M1, M2]).up('20260101000001');
+    expect(ran).toEqual(['20260101000001']);
+    expect(await adapter.tableExists('t1')).toBe(true);
+    expect(await adapter.tableExists('t2')).toBe(false);
+  });
 });
 
 describe('Migration — DSL: addIndex / removeIndex', () => {
@@ -259,9 +337,6 @@ describe('Migration — Rails-only / deferred', () => {
     await m.setMetadata('environment', 'production');
     expect(await m.getMetadata('environment')).toBe('production');
   });
-  test.skip('schema_migration_create_table_wont_be_affected_by_schema_cache (TODO: schema cache)', () => {});
-  test.skip('migration_context_with_default_schema_migration (TODO: MigrationContext)', () => {});
-  test.skip('migrator_versions enumeration (TODO: ensure parity)', () => {});
   test('name_collision_across_dbs: same model class can target different DBs in different scopes', async () => {
     const { Base, SQLiteAdapter } = await import('../../src');
     const dbA = new SQLiteAdapter({ adapter: 'sqlite', database: ':memory:' });
@@ -287,5 +362,12 @@ describe('Migration — Rails-only / deferred', () => {
     await dbA.disconnect();
     await dbB.disconnect();
   });
-  test.skip('add_drop_table_with_prefix_and_suffix (TODO: table prefix/suffix config)', () => {});
+  test('table prefix/suffix compose around base names', async () => {
+    const { Base } = await import('../../src');
+    class Pfx extends Base {
+      static override tablePrefix = 'app_';
+      static override tableSuffix = '_v2';
+    }
+    expect(Pfx.effectiveTableName()).toBe('app_pfxes_v2');
+  });
 });

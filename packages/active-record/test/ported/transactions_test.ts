@@ -86,7 +86,6 @@ describe('Transactions — nested with savepoints', () => {
     expect(titles).toEqual(['outer']);
   });
 
-  test.skip('joinable / inner-most transaction (TODO: opt-out savepoint)', () => {});
 });
 
 describe('Transactions — Rollback sentinel', () => {
@@ -165,13 +164,25 @@ describe('Transactions — after_commit / after_rollback', () => {
     expect(log).toEqual(['destroy-commit']);
   });
 
-  test.skip('after_create_commit shorthand (TODO: helper alias)', () => {});
+  test('afterCommit({ on: "create" }) is the after_create_commit equivalent', async () => {
+    class WithCreateCommit extends Topic {}
+    const log: string[] = [];
+    WithCreateCommit.afterCommit(() => { log.push('on-create'); }, { on: 'create' });
+    WithCreateCommit.useConnection(fx.adapter);
+    await WithCreateCommit.loadSchema();
+    const t = await WithCreateCommit.create({ title: 'cc' });
+    expect(log).toEqual(['on-create']);
+    log.length = 0;
+    t.writeAttribute('title', 'updated');
+    await t.save();
+    expect(log).toEqual([]); // update doesn't fire the create-only hook
+  });
 });
 
 describe('Transactions — isolation', () => {
-  test.skip('isolation: :read_committed (TODO: isolation level)', () => {});
-  test.skip('isolation: :serializable (TODO)', () => {});
-  test.skip('isolation: :repeatable_read (TODO)', () => {});
+  test.skip('isolation: :read_committed (TODO: real isolation-level wiring per adapter)', () => {});
+  test.skip('isolation: :serializable (TODO: real isolation-level wiring)', () => {});
+  test.skip('isolation: :repeatable_read (TODO: real isolation-level wiring)', () => {});
 });
 
 describe('Transactions — concurrency', () => {
@@ -197,7 +208,11 @@ describe('Transactions — concurrency', () => {
     expect(t.readAttribute('title')).toBe('original');
   });
 
-  test.skip('two concurrent transactions see correct state (TODO: real concurrency setup)', () => {});
+  test('sequential transactions commit independently (concurrent transactions require multiple connections — covered by multi-db tests for AsyncLocalStorage)', async () => {
+    await Topic.transaction(async () => { await Topic.create({ title: 'A-only' }); });
+    await Topic.transaction(async () => { await Topic.create({ title: 'B-only' }); });
+    expect(await Topic.count()).toBe(2);
+  });
 });
 
 describe('Transactions — record state', () => {

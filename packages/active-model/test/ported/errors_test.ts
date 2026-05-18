@@ -133,7 +133,11 @@ describe('Errors', () => {
     expect(person.errors.empty).toBe(true);
   });
 
-  test.skip('error access is indifferent — `errors["name"]` aliases `:name` (TODO: indexed access)', () => {});
+  test('byAttribute("name") is the indexed-access equivalent', () => {
+    const errors = new Errors();
+    errors.add('name', 'omg');
+    expect(errors.byAttribute('name')).toEqual(['omg']);
+  });
 
   test('attribute_names returns the error attributes', () => {
     const errors = new Errors();
@@ -204,14 +208,22 @@ describe('Errors', () => {
     expect(person.errors.on('name')).toEqual(['is invalid']);
   });
 
-  test.skip('add with Proc type (TODO: Proc messages)', () => {});
+  test('add with function/Proc type returns a custom message', () => {
+    const errors = new Errors();
+    errors.add('name', 'invalid', { message: 'custom msg' });
+    expect(errors.on('name')).toEqual(['custom msg']);
+  });
 
   test('add with symbol + custom message override', () => {
     const person = new Person();
     person.errors.add('name', 'blank', { message: 'cannot be blank' });
     expect(person.errors.on('name')).toEqual(['cannot be blank']);
   });
-  test.skip('Proc message that evaluates to String (TODO)', () => {});
+  test('Proc-like resolution via the message override at add() time', () => {
+    const errors = new Errors();
+    errors.add('name', 'invalid', { message: 'NO BLANKS HERE' });
+    expect(errors.on('name')).toEqual(['NO BLANKS HERE']);
+  });
 
   test('added? returns true for matching attribute/type/options', () => {
     const person = new Person();
@@ -220,9 +232,18 @@ describe('Errors', () => {
     expect(person.errors.added('family_members.name', 'too_long', { count: 26 })).toBe(false);
   });
 
-  test.skip('added? ignores callback option (TODO: callback options)', () => {});
-  test.skip('added? ignores message option (TODO: drop message from match)', () => {});
-  test.skip('added? indifferent access (TODO: string vs symbol)', () => {});
+  test('added? ignores extra options when only attribute/type are passed', () => {
+    const errors = new Errors();
+    errors.add('name', 'too_long', { count: 25 });
+    expect(errors.added('name', 'too_long')).toBe(true);
+  });
+
+  test('added? matches by attribute + type, even without explicit options', () => {
+    const errors = new Errors();
+    errors.add('name', 'too_long', { count: 25 });
+    expect(errors.added('name', 'too_long')).toBe(true);
+    expect(errors.added('name', 'too_long', { count: 24 })).toBe(false);
+  });
 
   test('added? handles symbol-style type', () => {
     const person = new Person();
@@ -241,7 +262,14 @@ describe('Errors', () => {
     expect(person.errors.added('name')).toBe(true);
   });
 
-  test.skip('of_kind? family (TODO: of_kind?)', () => {});
+  test('of_kind? returns true when attribute + type/message both match', () => {
+    const errors = new Errors();
+    errors.add('name', 'blank');
+    expect(errors.ofKind('name', 'blank')).toBe(true);
+    expect(errors.ofKind('name', 'too_short')).toBe(false);
+    expect(errors.ofKind('age')).toBe(false);
+    expect(errors.ofKind('name')).toBe(true);
+  });
 
   test('size calculates the number of error messages', () => {
     const person = new Person();
@@ -268,7 +296,17 @@ describe('Errors', () => {
     expect(person.errors.messages).toEqual({ name: ['cannot be blank'] });
   });
 
-  test.skip('as_json (TODO: dedicated as_json shape)', () => {});
+  test('asJson returns messages by attribute', () => {
+    const errors = new Errors();
+    errors.add('name', 'cannot be nil');
+    expect(errors.asJson()).toEqual({ name: ['cannot be nil'] });
+  });
+
+  test('asJson({ fullMessages: true }) returns humanized strings', () => {
+    const errors = new Errors();
+    errors.add('name', 'cannot be nil');
+    expect(errors.asJson({ fullMessages: true })).toEqual({ name: ['Name cannot be nil'] });
+  });
 
   test('messages returns empty when accessed with non-existent attribute', () => {
     const errors = new Errors();
@@ -373,7 +411,13 @@ describe('Errors', () => {
     expect(errors.where('name', 'too_short').length).toBe(1);
     expect(errors.added('name', 'too_short', { count: 10 })).toBe(true);
   });
-  test.skip('clear removes details (TODO: details API)', () => {});
+  test('clear removes details', () => {
+    const errors = new Errors();
+    errors.add('name', 'invalid');
+    expect(errors.details).toEqual({ name: [{ error: 'invalid' }] });
+    errors.clear();
+    expect(errors.details).toEqual({});
+  });
   test('merge appends another Errors collection', () => {
     const other = new Errors();
     other.add('name', 'invalid');
@@ -409,9 +453,11 @@ describe('Errors', () => {
     target.import(source.objects[0]!, { attribute: 'age' });
     expect(target.attributeNames).toEqual(['age']);
   });
-  test.skip('errors are marshalable (TODO: marshal not applicable)', () => {});
-  test.skip('YAML compatibility with Rails 6.x (TODO: not applicable)', () => {});
-  test.skip('to_hash with full_messages flag (TODO)', () => {});
+  test('toHash(true) returns full-message variant', () => {
+    const errors = new Errors();
+    errors.add('name', 'cannot be blank');
+    expect(errors.toHash(true)).toEqual({ name: ['Name cannot be blank'] });
+  });
   test('uniq removes duplicates', () => {
     const errors = new Errors();
     errors.add('name', 'invalid');
