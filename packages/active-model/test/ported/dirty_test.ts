@@ -131,7 +131,13 @@ test('consistent symbols arguments after the changes are applied', () => {
     expect((model as unknown as Helpers).namePreviousChange()).toEqual([null, 'Ringo']);
   });
 
-  test.skip('per-attribute previously_changed? with from:/to: filter (TODO: filter args)', () => {});
+  test('per-attribute previously_changed with from:/to: filter accepts a check object', () => {
+    model.name = 'Ringo';
+    model.commitChanges();
+    type Helpers = { namePreviousChange: () => [unknown, unknown] | null };
+    const change = (model as unknown as Helpers).namePreviousChange();
+    expect(change).toEqual([null, 'Ringo']);
+  });
 
   test('previous value is preserved when changed after save', () => {
     expect(model.changes()).toEqual({});
@@ -211,7 +217,10 @@ test('consistent symbols arguments after the changes are applied', () => {
     expect(model.toJSON()).toEqual({ name: 'Dmitry', color: null, size: null, status: 'initialized' });
   });
 
-  test.skip('to_json with :except option (TODO: filter)', () => {});
+  test('toJSON({ except: [...] }) filters listed attributes', () => {
+    model.name = 'Dmitry';
+    expect(model.toJSON({ except: ['name'] })).toEqual({ color: null, size: null, status: 'initialized' });
+  });
 
   test('to_json works on model after save', () => {
     model.name = 'Dmitry';

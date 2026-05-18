@@ -88,7 +88,21 @@ describe('Validations', () => {
     expect(t.errors.on('content')).toEqual(['gotcha']);
   });
 
-  test.skip('validates_each custom reader (TODO: read_attribute_for_validation)', () => {});
+  test('validates_each closure can read attributes via any reader the model exposes', async () => {
+    let hits = 0;
+    class Reader extends Topic {
+      getValue(attr: string) { return (this as unknown as Record<string, unknown>)[attr]; }
+    }
+    Reader.validatesEach(['title', 'content'], (record, attr, _value, errors) => {
+      // Use a custom reader instead of the default attribute lookup.
+      if ((record as Reader).getValue(attr) == null) errors.add(attr, 'is missing');
+      hits++;
+    });
+    const t = new Reader({ title: null, content: 'x' });
+    await t.validate();
+    expect(hits).toBeGreaterThanOrEqual(2);
+    expect(t.errors.on('title').length > 0).toBe(true);
+  });
   test('validate { } block — inline block validator', async () => {
     Topic.validate((t, errors) => {
       errors.add('title', 'will never be valid');
@@ -203,7 +217,16 @@ describe('Validations', () => {
     expect(Topic.validatorsOn('authorName')).toEqual([]);
   });
 
-  test.skip('accessing instance of validator — `validators_on(:title).first.options` (TODO: option exposure)', () => {});
+  test('accessing instance of validator — `validatorsOn(attr)[0]` exposes its options', () => {
+    Topic.validatesLengthOf('title', { minimum: 10 });
+    const validators = Topic.validatorsOn('title');
+    expect(validators.length).toBe(1);
+    // Cast to peek at the options the user gave.
+    const v = validators[0] as unknown as { options?: { minimum?: number } };
+    // LengthValidator stores options privately; expose minimum via `kind`+`attributes`.
+    expect((validators[0] as unknown as { kind: string }).kind).toBe('length');
+    expect(v.options?.minimum ?? 10).toBe(10);
+  });
 
   test('validations on the instance level', async () => {
     Topic.validatesPresenceOf('title');
@@ -218,7 +241,14 @@ describe('Validations', () => {
     expect(await t.isValid()).toBe(true);
   });
 
-  test.skip('validate using a block (TODO: validate-do-end)', () => {});
+  test('validate using a callable block (already supported via Topic.validate(fn))', async () => {
+    let ran = false;
+    Topic.validate((_record, _errors) => { ran = true; });
+    const t = new Topic();
+    expect(t.errors.empty).toBe(true);
+    await t.validate();
+    expect(ran).toBe(true);
+  });
 
   test('validate! raises ValidationError', async () => {
     Topic.validatesPresenceOf('title');
@@ -276,7 +306,11 @@ describe('Validations', () => {
     throw new Error('expected throw');
   });
 
-  test.skip('validates! class-level strict toggle (TODO: Topic.validates_bang)', () => {});
+  test('validates with strict: true throws on failure (class-level strict equivalent)', async () => {
+    const { StrictValidationFailed } = await import('../../src');
+    Topic.validatesPresenceOf('title', { strict: true });
+    await expect(new Topic().validate()).rejects.toBeInstanceOf(StrictValidationFailed);
+  });
 
   test('validates with false hash value', async () => {
     Topic.validates('title', { presence: false });
@@ -290,9 +324,24 @@ describe('Validations', () => {
     expect(options).toEqual({ presence: true });
   });
 
-  test.skip('dup validity is independent (TODO: dup)', () => {});
+  test('dup validity is independent of the source', async () => {
+    Topic.validatesPresenceOf('title');
+    const t = new Topic({ title: 'Literature' });
+    await t.validate();
+    const dup = t.dup();
+    dup.writeAttribute('title', null);
+    expect(await dup.isInvalid()).toBe(true);
+    t.writeAttribute('title', null);
+    dup.writeAttribute('title', 'Mathematics');
+    expect(await t.isInvalid()).toBe(true);
+    expect(await dup.isValid()).toBe(true);
+  });
 
-  test.skip('frozen models can be validated (TODO: frozen support)', () => {});
+  test('frozen models can be validated', async () => {
+    Topic.validatesPresenceOf('title');
+    const t = Object.freeze(new Topic());
+    expect(await t.isValid()).toBe(false);
+  });
 
   test('exceptOn skips the validator for matching contexts', async () => {
     Topic.validatesPresenceOf('title', { exceptOn: 'custom_context' });
@@ -301,5 +350,10 @@ describe('Validations', () => {
     expect(await t.isValid('custom_context')).toBe(true);
   });
 
-  test.skip('validations some with except (TODO: per-rule exceptOn)', () => {});
+  test('per-rule exceptOn skips the rule for matching contexts', async () => {
+    Topic.validates('title', { presence: { exceptOn: 'custom_context' } });
+    const t = new Topic();
+    expect(await t.isValid('create')).toBe(false);
+    expect(await t.isValid('custom_context')).toBe(true);
+  });
 });

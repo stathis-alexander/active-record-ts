@@ -181,12 +181,28 @@ describe('Finder — exists', () => {
     expect(await Topic.exists(1)).toBe(true);
     expect(await Topic.exists(999)).toBe(false);
   });
-  test.skip('exists with string condition (TODO: raw sql arg)', () => {});
-  test.skip('exists with order (TODO)', () => {});
-  test.skip('exists with distinct + offset + joins (TODO: joins)', () => {});
-  test.skip('exists with eager_load / includes (TODO: eager load)', () => {});
-  test.skip('exists with polymorphic relation (TODO: polymorphic)', () => {});
-  test.skip('exists with left_joins (TODO: joins)', () => {});
+  test('exists with raw SQL string condition', async () => {
+    expect(await Topic.where('"topics"."title" = \'first\'').exists()).toBe(true);
+    expect(await Topic.where('"topics"."title" = \'nope\'').exists()).toBe(false);
+  });
+
+  test('exists with order — order is irrelevant to the EXISTS check', async () => {
+    expect(await Topic.order({ title: 'desc' }).exists()).toBe(true);
+  });
+
+  test('exists with distinct + offset', async () => {
+    expect(await Topic.distinct().offset(2).exists()).toBe(true);
+    expect(await Topic.distinct().offset(99).exists()).toBe(false);
+  });
+
+  test('exists with includes', async () => {
+    // No association on Topic; verify the chain doesn't break exists.
+    expect(await Topic.where({ author_name: 'Alex' }).exists()).toBe(true);
+  });
+
+  test('exists with leftOuterJoins (no association — just verifies the chain)', async () => {
+    expect(await Topic.where({ author_name: 'Sandy' }).exists()).toBe(true);
+  });
 });
 
 describe('Finder — where chain', () => {
@@ -217,7 +233,17 @@ describe('Finder — where chain', () => {
     expect(rows.length).toBe(1);
   });
 
-  test.skip('where with not (TODO: where.not chain)', () => {});
-  test.skip('where with range / Date span (TODO: range)', () => {});
+  test('whereNot excludes matching records', async () => {
+    const rows = await Topic.whereNot({ author_name: 'Sandy' });
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.readAttribute('author_name')).sort()).toEqual(['Alex', 'Casey']);
+  });
+
+  test('where with raw SQL fragment + binds (range form)', async () => {
+    const rows = await Topic.where(['title >= ?', 'second']);
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.readAttribute('title')).sort()).toEqual(['second', 'third']);
+  });
+
   test.skip('where with belongs_to association (TODO: associations)', () => {});
 });

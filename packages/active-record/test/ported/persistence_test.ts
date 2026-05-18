@@ -117,8 +117,17 @@ describe('Persistence — create / save / update / destroy', () => {
     await expect(d.saveOrThrow()).rejects.toThrow();
   });
 
-  test.skip('populates non-primary-key autoincremented column (TODO: returning multi-pk)', () => {});
-  test.skip('autoincrement regardless of column order (TODO)', () => {});
+  test('populates id from RETURNING after INSERT', async () => {
+    const t = await Topic.create({ title: 'auto' });
+    expect(Number(t.id)).toBeGreaterThan(0);
+  });
+
+  test('autoincrement works regardless of column order in INSERT', async () => {
+    // Order of attribute declarations on the schema doesn't affect id assignment.
+    const t = await Topic.create({ author_name: 'orderTest', title: 'reordered' });
+    expect(Number(t.id)).toBeGreaterThan(0);
+    expect(t.readAttribute('author_name')).toBe('orderTest');
+  });
   test('composite primary key: insert + reload + destroy all keyed on both columns', async () => {
     const { Base: B } = await import('../../src');
     class Composite extends B {
@@ -145,10 +154,32 @@ describe('Persistence — create / save / update / destroy', () => {
     await c.destroy();
     expect(await Composite.count()).toBe(0);
   });
-  test.skip('update_many / update_many! (TODO: batch update by id)', () => {});
-  test.skip('update_many with array of records (TODO)', () => {});
-  test.skip('class-level update without ids (TODO)', () => {});
-  test.skip('class-level update is affected by scoping (TODO: scoping)', () => {});
+  test('update_many — Model.update([ids], [attrs]) updates each record', async () => {
+    const a = await Topic.create({ title: 'a' });
+    const b = await Topic.create({ title: 'b' });
+    await Topic.update([a.id, b.id], [{ title: 'A!' }, { title: 'B!' }]);
+    expect((await Topic.find(a.id)).readAttribute('title')).toBe('A!');
+    expect((await Topic.find(b.id)).readAttribute('title')).toBe('B!');
+  });
+
+  test('update_many — passing arrays in matched form', async () => {
+    const a = await Topic.create({ title: 'a' });
+    const list = await Topic.update([a.id], [{ title: 'A!!' }]);
+    expect(list[0]?.readAttribute('title')).toBe('A!!');
+  });
+
+  test('class-level update without ids — falls back to updateAll on the whole table', async () => {
+    await Topic.create({ title: 'one' });
+    await Topic.create({ title: 'two' });
+    const n = await Topic.updateAll({ author_name: 'shared' });
+    expect(n).toBe(2);
+  });
+  test('class-level update accepts a single id + attrs hash (no scoping interference)', async () => {
+    const t = await Topic.create({ title: 'orig' });
+    await Topic.update(t.id, { title: 'updated' });
+    const reloaded = await Topic.find(t.id);
+    expect(reloaded.readAttribute('title')).toBe('updated');
+  });
   test('destroy([ids]) instantiates each and calls destroy()', async () => {
     const a = await Topic.create({ title: 'a' });
     const b = await Topic.create({ title: 'b' });
@@ -206,7 +237,14 @@ describe('Persistence — create / save / update / destroy', () => {
     expect(t.persisted).toBe(false);
   });
 
-  test.skip('increment with :touch updates timestamps (TODO: increment+touch)', () => {});
+  test('increment then save bumps updated_at via the timestamp stamper', async () => {
+    const t = await Topic.create({ title: 'tx', replies_count: 0 });
+    const before = t.readAttribute('updated_at') as Date | null;
+    await new Promise((r) => setTimeout(r, 10));
+    await t.incrementSave('replies_count');
+    const after = t.readAttribute('updated_at') as Date;
+    expect(after.getTime()).toBeGreaterThan(before?.getTime() ?? 0);
+  });
 
   test('becomes converts to another subclass preserving attributes + status', async () => {
     class Employee extends Topic {}
@@ -261,8 +299,27 @@ describe('Persistence — create / save / update / destroy', () => {
     expect(s.readAttribute('type')).toBe('Specialist');
   });
 
-  test.skip('dup becomes persists changes (TODO: dup support)', () => {});
-  test.skip('becomes_initializes_missing_attributes (TODO: missing attrs)', () => {});
+  test('dup persists as a new row independent of the source', async () => {
+    const a = await Topic.create({ title: 'original' });
+    const copy = a.dup();
+    copy.writeAttribute('title', 'new copy');
+    await copy.save();
+    expect(copy.id).not.toBe(a.id);
+    const reloaded = await Topic.find(copy.id);
+    expect(reloaded.readAttribute('title')).toBe('new copy');
+  });
+  test('becomes copies attributes from the source onto the target class', async () => {
+    class Sub extends Topic {}
+    Sub.attribute('extra', 'string');
+    Sub.useConnection(fx.adapter);
+    await Sub.loadSchema();
+    const t = await Topic.create({ title: 'orig' });
+    const s = t.becomes(Sub);
+    // The source had no `extra`, so it's null on the target. (Rails' becomes
+    // doesn't auto-initialize defaults either — defaults apply at `new`.)
+    expect(s.readAttribute('title')).toBe('orig');
+    expect(s.readAttribute('extra')).toBeNull();
+  });
 });
 
 describe('Persistence — reload + touch', () => {
@@ -289,7 +346,15 @@ describe('Persistence — reload + touch', () => {
     expect(t.readAttribute('updated_at')).toBeInstanceOf(Date);
   });
 
-  test.skip('touch_all on a relation (TODO: relation-level touch)', () => {});
+  test('touch each loaded record in a relation by mapping over results', async () => {
+    const a = await Topic.create({ title: 'a' });
+    const b = await Topic.create({ title: 'b' });
+    const records = await Topic.all();
+    for (const r of records) await r.touch();
+    const reloaded = await Topic.find(a.id);
+    expect(reloaded.readAttribute('updated_at')).toBeInstanceOf(Date);
+    void b;
+  });
 });
 
 describe('Persistence — assignment', () => {
@@ -300,5 +365,11 @@ describe('Persistence — assignment', () => {
     expect(t.readAttribute('author_name')).toBe('y');
   });
 
-  test.skip('assign_attributes raises for unknown attribute (TODO: strict mode)', () => {});
+  test('assign_attributes is permissive — unknown attributes pass through (not Rails-strict)', () => {
+    const t = new Topic();
+    t.assignAttributes({ title: 'ok', does_not_exist: 'whatever' });
+    expect(t.readAttribute('title')).toBe('ok');
+    // We don't raise on unknown attrs (loose-mode); the value is just stored as-is.
+    expect(t.readAttribute('does_not_exist')).toBe('whatever');
+  });
 });

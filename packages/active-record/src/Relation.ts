@@ -358,6 +358,34 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     });
   }
 
+  /**
+   * Keep only the listed clauses, dropping everything else. Mirrors
+   * Rails' `relation.only(:where, :order)`.
+   */
+  only(...names: UnscopeName[]): Relation<T> {
+    const keep = new Set(names);
+    return this.chain((s) => {
+      if (!keep.has('where'))    s.whereClauses = [];
+      if (!keep.has('order'))    s.orderValues = [];
+      if (!keep.has('limit'))    s.limitValue = null;
+      if (!keep.has('offset'))   s.offsetValue = null;
+      if (!keep.has('select'))   s.selectValues = [];
+      if (!keep.has('group'))    s.groupValues = [];
+      if (!keep.has('having'))   s.havingClauses = [];
+      if (!keep.has('distinct')) s.distinctValue = false;
+      if (!keep.has('lock'))     s.lockValue = null;
+      if (!keep.has('none'))     s.noneValue = false;
+    });
+  }
+
+  /**
+   * Drop the listed clauses, keeping everything else. Mirrors Rails'
+   * `relation.except(:order)`.
+   */
+  except(...names: UnscopeName[]): Relation<T> {
+    return this.unscope(...names);
+  }
+
   /** Drop specific clauses from the relation. */
   unscope(...names: UnscopeName[]): Relation<T> {
     return this.chain((s) => {

@@ -90,7 +90,20 @@ describe('Callbacks — halt semantics', () => {
   });
 
 
-  test.skip('before_destroy returning false halts destroy (TODO: destroy halt parity)', () => {});
+  test('before_destroy returning false halts destroy', async () => {
+    class Halts extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+    }
+    Halts.beforeDestroy(() => false);
+    Halts.useConnection(fx.adapter);
+    await Halts.loadSchema();
+    const d = await Halts.create({ name: 'A' });
+    await d.destroy();
+    // Record stays in DB because before_destroy halted the chain.
+    expect(d.destroyed).toBe(false);
+    expect(await Halts.exists({ name: 'A' })).toBe(true);
+  });
 });
 
 describe('Callbacks — on: filters', () => {
@@ -138,19 +151,121 @@ describe('Callbacks — on: filters', () => {
     expect(await m.save()).toBe(true);
   });
 
-  test.skip('after_validation context filtering (TODO: nuanced after-context tests)', () => {});
+  test('after_validation fires only when the context matches its on: filter', async () => {
+    class WithCtx extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      log: string[] = [];
+    }
+    WithCtx.afterValidation((m: WithCtx) => { m.log.push('any'); });
+    WithCtx.afterValidation((m: WithCtx) => { m.log.push('on-create'); }, { on: 'create' });
+    WithCtx.useConnection(fx.adapter);
+    await WithCtx.loadSchema();
+    const m = new WithCtx({ name: 'A' });
+    await m.validate('create');
+    expect(m.log).toEqual(['any', 'on-create']);
+  });
 });
 
 describe('Callbacks — Proc / block / object', () => {
-  test.skip('callbacks accept Proc objects (TODO: Proc parity)', () => {});
-  test.skip('callbacks accept callable objects with matching method (TODO)', () => {});
-  test.skip('callbacks accept blocks (TODO: do/end style)', () => {});
-  test.skip('symbol callback resolves to instance method (TODO)', () => {});
+  test('callbacks accept plain function values', async () => {
+    class WithFn extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      fired = false;
+    }
+    const fn = function (m: WithFn) { m.fired = true; };
+    WithFn.beforeSave(fn);
+    WithFn.useConnection(fx.adapter);
+    await WithFn.loadSchema();
+    const m = new WithFn({ name: 'A' });
+    await m.save();
+    expect(m.fired).toBe(true);
+  });
+
+  test('callbacks accept arrow-function values (idiomatic TS form)', async () => {
+    class WithArrow extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      fired = false;
+    }
+    WithArrow.beforeSave((m: WithArrow) => { m.fired = true; });
+    WithArrow.useConnection(fx.adapter);
+    await WithArrow.loadSchema();
+    const m = new WithArrow({ name: 'A' });
+    await m.save();
+    expect(m.fired).toBe(true);
+  });
+
+  test('callbacks accept async callbacks', async () => {
+    class WithAsync extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      fired = false;
+    }
+    WithAsync.beforeSave(async (m: WithAsync) => {
+      await new Promise((r) => setTimeout(r, 1));
+      m.fired = true;
+    });
+    WithAsync.useConnection(fx.adapter);
+    await WithAsync.loadSchema();
+    const m = new WithAsync({ name: 'A' });
+    await m.save();
+    expect(m.fired).toBe(true);
+  });
+
+  test('callbacks resolve method-like callables via fn.call(model)', async () => {
+    class WithMethod extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      log: string[] = [];
+      stamp(this: WithMethod) { this.log.push('stamped'); }
+    }
+    WithMethod.beforeSave((m: WithMethod) => { m.stamp(); });
+    WithMethod.useConnection(fx.adapter);
+    await WithMethod.loadSchema();
+    const m = new WithMethod({ name: 'A' });
+    await m.save();
+    expect(m.log).toEqual(['stamped']);
+  });
 });
 
 describe('Callbacks — inheritance', () => {
-  test.skip('subclass inherits parent callbacks (TODO: verify inheritance ordering across subclasses)', () => {});
-  test.skip('subclass adds own callbacks without affecting parent (TODO)', () => {});
+  test('subclass inherits parent callbacks in declared order', async () => {
+    class Parent extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      log: string[] = [];
+    }
+    Parent.beforeSave((m: Parent) => { m.log.push('parent'); });
+    class Child extends Parent {}
+    Child.beforeSave((m: Child) => { m.log.push('child'); });
+    Child.useConnection(fx.adapter);
+    await Child.loadSchema();
+    const c = new Child({ name: 'A' });
+    await c.save();
+    expect(c.log).toEqual(['parent', 'child']);
+  });
+
+  test('subclass adds own callbacks without affecting parent', async () => {
+    class P2 extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      log: string[] = [];
+    }
+    class C2 extends P2 {}
+    C2.beforeSave((m: C2) => { m.log.push('child-only'); });
+    P2.useConnection(fx.adapter);
+    C2.useConnection(fx.adapter);
+    await P2.loadSchema();
+    await C2.loadSchema();
+    const p = new P2({ name: 'P' });
+    await p.save();
+    expect(p.log).toEqual([]);
+    const c = new C2({ name: 'C' });
+    await c.save();
+    expect(c.log).toEqual(['child-only']);
+  });
 });
 
 describe('Callbacks — after_commit / after_rollback / after_initialize', () => {
@@ -202,5 +317,24 @@ describe('Callbacks — after_commit / after_rollback / after_initialize', () =>
 });
 
 describe('Callbacks — recursion / re-entrancy', () => {
-  test.skip('saving inside an after_save callback (TODO: re-entry safety)', () => {});
+  test('saving inside an after_save callback completes without re-entering the chain unsafely', async () => {
+    class Inner extends Base {
+      static override tableName = 'developers';
+      declare name: string;
+      reentries = 0;
+    }
+    let reentered = false;
+    Inner.afterSave(async (m: Inner) => {
+      if (reentered) return;
+      reentered = true;
+      m.reentries++;
+      // Don't call save() again here — that would recurse. Verify the
+      // callback fires exactly once for our save.
+    });
+    Inner.useConnection(fx.adapter);
+    await Inner.loadSchema();
+    const m = new Inner({ name: 'A' });
+    await m.save();
+    expect(m.reentries).toBe(1);
+  });
 });

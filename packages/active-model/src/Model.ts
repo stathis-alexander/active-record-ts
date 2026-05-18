@@ -270,8 +270,20 @@ export class Model {
 
   // ──────────────────────────── helpers ────────────────────────────
 
-  toJSON(): Record<string, unknown> {
-    return this.attributes();
+  toJSON(options: { except?: readonly string[]; only?: readonly string[] } = {}): Record<string, unknown> {
+    const all = this.attributes();
+    if (options.only) {
+      const out: Record<string, unknown> = {};
+      for (const name of options.only) if (name in all) out[name] = all[name];
+      return out;
+    }
+    if (options.except) {
+      const out: Record<string, unknown> = {};
+      const exclude = new Set(options.except);
+      for (const [name, value] of Object.entries(all)) if (!exclude.has(name)) out[name] = value;
+      return out;
+    }
+    return all;
   }
 
   /**

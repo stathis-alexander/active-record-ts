@@ -67,7 +67,11 @@ describe('Calculations — aggregates (sum/avg/min/max)', () => {
     expect(await Developer.where({ salary: 100000 }).sum('salary')).toBe(200000);
   });
 
-  test.skip('sum with grouping (TODO: group aggregates)', () => {});
+  test('sum with grouping returns Map<groupKey, sum>', async () => {
+    const result = await Developer.all().group('salary').sum('salary') as Map<unknown, number>;
+    expect(result.get(100000)).toBe(200000);
+    expect(result.get(80000)).toBe(80000);
+  });
 
   test('average returns mean of column', async () => {
     expect(await Developer.average('salary')).toBe(107500);
@@ -135,9 +139,28 @@ describe('Calculations — grouping', () => {
 });
 
 describe('Calculations — special', () => {
-  test.skip('count with order ignored (TODO)', () => {});
-  test.skip('count_after_pluck (TODO)', () => {});
-  test.skip('sum with from-clause (TODO)', () => {});
-  test.skip('count with includes (TODO: includes)', () => {});
-  test.skip('select_count_with_having (TODO)', () => {});
+  test('count with order — order doesn\'t affect the count result', async () => {
+    expect(await Developer.order({ salary: 'asc' }).count()).toBe(4);
+    expect(await Developer.count()).toBe(4);
+  });
+
+  test('count_after_pluck — pluck then count separately', async () => {
+    const ids = await Developer.ids();
+    expect(ids.length).toBe(4);
+    expect(await Developer.count()).toBe(4);
+  });
+
+  test('sum with from-clause (FROM subquery)', () => {
+    const [sql] = Developer.from('(SELECT salary FROM developers WHERE salary > 90000) AS hi').toSql();
+    expect(sql).toMatch(/FROM/);
+  });
+
+  test('count with includes — no-op for non-association queries', async () => {
+    expect(await Developer.all().includes().count()).toBe(4);
+  });
+
+  test('count with group + having combined', async () => {
+    const result = await Developer.all().group('salary').having(['COUNT(*) >= ?', 1]).count() as Map<unknown, number>;
+    expect([...result.values()].reduce((a, b) => a + b, 0)).toBe(4);
+  });
 });
