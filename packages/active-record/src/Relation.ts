@@ -64,6 +64,8 @@ type RelationState = {
   strictLoading: boolean;
   /** Tables registered via `references()` — informational for now. */
   referenceValues: string[];
+  /** True when records loaded from this relation should refuse to save. */
+  readonlyValue: boolean;
   limitValue: number | null;
   offsetValue: number | null;
   distinctValue: boolean;
@@ -85,6 +87,7 @@ const emptyState = (): RelationState => ({
   annotations: [],
   strictLoading: false,
   referenceValues: [],
+  readonlyValue: false,
   fromValue: null,
   limitValue: null,
   offsetValue: null,
@@ -107,6 +110,7 @@ const cloneState = (state: RelationState): RelationState => ({
   annotations: [...state.annotations],
   strictLoading: state.strictLoading,
   referenceValues: [...state.referenceValues],
+  readonlyValue: state.readonlyValue,
   fromValue: state.fromValue,
   limitValue: state.limitValue,
   offsetValue: state.offsetValue,
@@ -270,6 +274,17 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   strictLoading(value = true): Relation<T> {
     return this.chain((s) => {
       s.strictLoading = value;
+    });
+  }
+
+  /**
+   * Mark this relation as readonly. Records hydrated from it refuse to
+   * `save()` — useful when callers want to enforce a "view only" view.
+   * Mirrors Rails' `Model.readonly`.
+   */
+  readonly(value = true): Relation<T> {
+    return this.chain((s) => {
+      s.readonlyValue = value;
     });
   }
 
@@ -507,6 +522,10 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     const [sql, binds] = this.toSql();
     const rows = await this.klass.connection().execute(sql, binds);
     this.loaded = rows.map((row) => this.klass.instantiate(row));
+    if (this.state.readonlyValue) {
+      // biome-ignore lint/suspicious/noExplicitAny: protected flag
+      for (const r of this.loaded) (r as any)._readonly = true;
+    }
     if (this.state.preloadValues.length > 0 && this.loaded.length > 0) {
       for (const name of this.state.preloadValues) {
         await preloadAssociation(this.loaded, name);

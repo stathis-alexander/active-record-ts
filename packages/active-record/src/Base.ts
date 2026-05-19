@@ -54,6 +54,13 @@ export class RecordNotSaved extends Error {
   }
 }
 
+/** Thrown by `save()` when the record was loaded from a `readonly()` relation. */
+export class ReadOnlyRecord extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 export { RecordNotFound };
 
 /**
@@ -444,11 +451,14 @@ export class Base extends Model {
   declare protected _persisted: boolean;
   /** True after `destroy` has been called. */
   declare protected _destroyed: boolean;
+  /** True when this record was loaded from a `readonly()` relation. */
+  declare protected _readonly: boolean;
 
   constructor(values: Record<string, unknown> = {}) {
     super(values);
     this._persisted = false;
     this._destroyed = false;
+    this._readonly = false;
   }
 
   // ──────────────────────────── instance state ────────────────────────────
@@ -1211,6 +1221,7 @@ export class Base extends Model {
    */
   async save(): Promise<boolean> {
     const ctor = this.constructor as typeof Base;
+    if (this._readonly) throw new ReadOnlyRecord(`${ctor.name} is marked readonly`);
     const wasNew = this.newRecord;
     if (!(await this.validate(wasNew ? 'create' : 'update'))) return false;
     // Snapshot pre-save state so a rollback can restore it.

@@ -1,4 +1,4 @@
-export { Base, RecordInvalid, RecordNotFound, RecordNotSaved, type BaseConstructor } from './Base';
+export { Base, ReadOnlyRecord, RecordInvalid, RecordNotFound, RecordNotSaved, type BaseConstructor } from './Base';
 export { ConnectionAdapter, AdapterUnavailableError, Rollback, resolveLogicalType } from './ConnectionAdapter';
 export type { TransactionOptions } from './ConnectionAdapter';
 export { Relation } from './Relation';

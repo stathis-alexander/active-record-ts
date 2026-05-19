@@ -245,5 +245,20 @@ describe('Finder — where chain', () => {
     expect(rows.map((r) => r.readAttribute('title')).sort()).toEqual(['second', 'third']);
   });
 
-  test.skip('where with belongs_to association (TODO: associations)', () => {});
+  test('where with a belongs_to association resolves to the foreign key', async () => {
+    const { Author, Post } = await import('./_fixtures');
+    class Writer extends Author {}
+    class Article extends Post {}
+    Article.belongsTo('author', { class: () => Writer, foreignKey: 'author_id' });
+    Writer.useConnection(fx.adapter);
+    Article.useConnection(fx.adapter);
+    await Writer.loadSchema();
+    await Article.loadSchema();
+    const a = await Writer.create({ name: 'Alex' });
+    await Article.create({ title: 'hi', author_id: a.id as number });
+    await Article.create({ title: 'other' });
+    const rows = await Article.where({ author: a });
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.readAttribute('title')).toBe('hi');
+  });
 });
