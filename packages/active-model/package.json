@@ -1,6 +1,6 @@
 {
   "name": "@active-record-ts/active-model",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Rails-style ActiveModel for TypeScript — typed attributes, dirty tracking, validations, callbacks.",
   "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
   "license": "MIT",
