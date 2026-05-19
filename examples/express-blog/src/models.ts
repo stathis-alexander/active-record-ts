@@ -1,4 +1,4 @@
-import { Base, type Relation } from '@arelts/active-record';
+import { Base, type Relation } from '@active-record-ts/active-record';
 
 export class User extends Base {
   static override tableName = 'users';

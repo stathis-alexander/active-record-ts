@@ -13,7 +13,7 @@
     "db:schema:load": "active-record db:schema:load"
   },
   "dependencies": {
-    "@arelts/active-record": "workspace:*",
+    "@active-record-ts/active-record": "workspace:*",
     "express": "^4.19.2"
   },
   "devDependencies": {

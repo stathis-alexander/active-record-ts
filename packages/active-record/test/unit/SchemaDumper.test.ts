@@ -57,7 +57,7 @@ describe('SchemaDumper', () => {
 
   test('dumpSchemaSource emits a defineSchema module', async () => {
     const source = await dumpSchemaSource(adapter, { version: '20260101000002' });
-    expect(source).toContain("import { defineSchema } from '@arelts/active-record'");
+    expect(source).toContain("import { defineSchema } from '@active-record-ts/active-record'");
     expect(source).toContain("export const version = '20260101000002'");
     expect(source).toContain("s.createTable('users'");
     expect(source).toContain("s.createTable('posts'");

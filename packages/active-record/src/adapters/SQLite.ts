@@ -3,7 +3,7 @@
  * the hood; we wrap each call in a microtask for API uniformity.
  */
 
-import { Arel } from '@arelts/arel';
+import { Arel } from '@active-record-ts/arel';
 import { ConnectionAdapter, TransactionIsolationError, type TransactionOptions } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from '../types';
 import { resolveLogicalType } from '../ConnectionAdapter';

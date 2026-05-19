@@ -187,7 +187,7 @@ const uniqDefined = (values: unknown[]): unknown[] => {
 /** Lazy cache lookup that avoids importing the cache symbol at top of file. */
 const readCacheValue = (record: Base, name: string): Base | Base[] | null => {
   // biome-ignore lint/suspicious/noExplicitAny: read off the symbol-keyed field
-  const cache = (record as any)[Symbol.for('@arelts/active-record:associationCache')] as Map<string, Base | Base[] | null> | undefined;
+  const cache = (record as any)[Symbol.for('@active-record-ts/active-record:associationCache')] as Map<string, Base | Base[] | null> | undefined;
   return cache?.get(name) ?? null;
 };
 

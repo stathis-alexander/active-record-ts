@@ -11,7 +11,7 @@
  * to the same connection so BEGIN/COMMIT semantics work.
  */
 
-import { Arel, TreeManager } from '@arelts/arel';
+import { Arel, TreeManager } from '@active-record-ts/arel';
 import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from './types';
 
 /** Errors thrown by adapters when the driver isn't installed. */

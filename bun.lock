@@ -18,7 +18,7 @@
       "name": "express-blog-example",
       "version": "0.0.0",
       "dependencies": {
-        "@arelts/active-record": "workspace:*",
+        "@active-record-ts/active-record": "workspace:*",
         "express": "^4.19.2",
       },
       "devDependencies": {
@@ -26,18 +26,21 @@
       },
     },
     "packages/active-model": {
-      "name": "@arelts/active-model",
+      "name": "@active-record-ts/active-model",
       "version": "1.0.0",
       "peerDependencies": {
         "typescript": "^5",
       },
     },
     "packages/active-record": {
-      "name": "@arelts/active-record",
+      "name": "@active-record-ts/active-record",
       "version": "1.0.0",
+      "bin": {
+        "active-record": "./bin/active-record.ts",
+      },
       "dependencies": {
-        "@arelts/active-model": "workspace:*",
-        "@arelts/arel": "workspace:*",
+        "@active-record-ts/active-model": "workspace:*",
+        "@active-record-ts/arel": "workspace:*",
       },
       "optionalDependencies": {
         "mysql2": "^3.11.0",
@@ -48,7 +51,7 @@
       },
     },
     "packages/arel": {
-      "name": "@arelts/arel",
+      "name": "@active-record-ts/arel",
       "version": "1.0.0",
       "peerDependencies": {
         "typescript": "^5",
@@ -56,11 +59,11 @@
     },
   },
   "packages": {
-    "@arelts/active-model": ["@arelts/active-model@workspace:packages/active-model"],
+    "@active-record-ts/active-model": ["@active-record-ts/active-model@workspace:packages/active-model"],
 
-    "@arelts/active-record": ["@arelts/active-record@workspace:packages/active-record"],
+    "@active-record-ts/active-record": ["@active-record-ts/active-record@workspace:packages/active-record"],
 
-    "@arelts/arel": ["@arelts/arel@workspace:packages/arel"],
+    "@active-record-ts/arel": ["@active-record-ts/arel@workspace:packages/arel"],
 
     "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, "sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g=="],
 

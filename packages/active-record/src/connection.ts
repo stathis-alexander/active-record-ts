@@ -22,7 +22,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ConnectionAdapter } from './ConnectionAdapter';
 
-const REGISTRY = Symbol.for('@arelts/active-record:connections');
+const REGISTRY = Symbol.for('@active-record-ts/active-record:connections');
 
 export type Role = 'writing' | 'reading' | (string & {});
 

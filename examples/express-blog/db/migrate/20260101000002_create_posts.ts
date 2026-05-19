@@ -1,4 +1,4 @@
-import { Migration } from '@arelts/active-record';
+import { Migration } from '@active-record-ts/active-record';
 
 export default class CreatePosts extends Migration {
   static override version = '20260101000002';

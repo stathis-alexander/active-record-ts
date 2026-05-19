@@ -1,5 +1,5 @@
 {
-  "name": "@arelts/active-record",
+  "name": "@active-record-ts/active-record",
   "version": "1.0.0",
   "description": "Rails style ActiveRecord in TypeScript",
   "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
@@ -28,8 +28,8 @@
     }
   },
   "dependencies": {
-    "@arelts/active-model": "workspace:*",
-    "@arelts/arel": "workspace:*"
+    "@active-record-ts/active-model": "workspace:*",
+    "@active-record-ts/arel": "workspace:*"
   },
   "optionalDependencies": {
     "mysql2": "^3.11.0",

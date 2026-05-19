@@ -1,4 +1,4 @@
-import { Base, buildAdapter, loadConnectionConfig } from '@arelts/active-record';
+import { Base, buildAdapter, loadConnectionConfig } from '@active-record-ts/active-record';
 import { Post, User } from './models';
 
 /**
