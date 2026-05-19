@@ -25,10 +25,7 @@ import type { ColumnInfo, ForeignKeyInfo, IndexInfo } from '../types';
 import type { ColumnOptions, ColumnType } from './types';
 
 /** Map an adapter's raw `sqlType` to a logical migration `ColumnType` + options. */
-const inferColumn = (
-  adapterName: string,
-  col: ColumnInfo,
-): { type: ColumnType; options: ColumnOptions } => {
+const inferColumn = (adapterName: string, col: ColumnInfo): { type: ColumnType; options: ColumnOptions } => {
   const sql = col.sqlType.toLowerCase().trim();
   const options: ColumnOptions = {};
   if (col.null === false) options.null = false;
@@ -191,12 +188,7 @@ const matchesAutoIndex = (tableName: string, idx: IndexInfo): boolean => {
   return idx.name === auto && !idx.unique;
 };
 
-const emitCreateTable = (
-  adapterName: string,
-  tableName: string,
-  cols: ColumnInfo[],
-  pkName: string,
-): string[] => {
+const emitCreateTable = (adapterName: string, tableName: string, cols: ColumnInfo[], pkName: string): string[] => {
   const lines: string[] = [];
   const pkOpt = pkName === 'id' ? '' : `, { primaryKey: ${stringLiteral(pkName)} }`;
   lines.push(`s.createTable(${stringLiteral(tableName)}, (t) => {`);

@@ -4,7 +4,12 @@
  */
 
 import { Arel } from '@active-record-ts/arel';
-import { ConnectionAdapter, AdapterUnavailableError, isolationLevelSql, type TransactionOptions } from '../ConnectionAdapter';
+import {
+  ConnectionAdapter,
+  AdapterUnavailableError,
+  isolationLevelSql,
+  type TransactionOptions,
+} from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from '../types';
 
@@ -72,7 +77,7 @@ export class PostgresBunAdapter extends ConnectionAdapter {
     const cast = this.castBinds(binds);
     const result = await this.client().unsafe(sql, cast);
     const rows = Array.from(result as Iterable<Row>) as Row[];
-    const rowsAffected = ((result as { count?: number }).count) ?? rows.length;
+    const rowsAffected = (result as { count?: number }).count ?? rows.length;
     return rows.length > 0 ? { rowsAffected, returning: rows } : { rowsAffected };
   }
 
@@ -161,9 +166,7 @@ export class PostgresBunAdapter extends ConnectionAdapter {
          AND table_type = 'BASE TABLE'
        ORDER BY table_name`,
     )) as Array<{ table_name: string }>;
-    return rows
-      .map((r) => r.table_name)
-      .filter((n) => n !== 'schema_migrations' && n !== 'ar_internal_metadata');
+    return rows.map((r) => r.table_name).filter((n) => n !== 'schema_migrations' && n !== 'ar_internal_metadata');
   }
 
   override async indexes(tableName: string): Promise<IndexInfo[]> {
@@ -208,7 +211,14 @@ export class PostgresBunAdapter extends ConnectionAdapter {
          AND tc.constraint_type = 'FOREIGN KEY'
        ORDER BY tc.constraint_name`,
       [tableName],
-    )) as Array<{ name: string; column: string; to_table: string; to_column: string; on_delete: string; on_update: string }>;
+    )) as Array<{
+      name: string;
+      column: string;
+      to_table: string;
+      to_column: string;
+      on_delete: string;
+      on_update: string;
+    }>;
     return rows.map((r) => ({
       name: r.name,
       fromTable: tableName,

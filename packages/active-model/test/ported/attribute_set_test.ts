@@ -12,15 +12,26 @@
 import { describe, expect, test } from 'bun:test';
 import { AttributeSet, Attributes, FloatType, IntegerType, StringType } from '../../src';
 
-const buildSet = (defs: Array<[string, ConstructorParameters<typeof Attributes>[0] extends never ? never : { type: { type: string } }]> | Record<string, { type: string }> = {}): AttributeSet => {
+const buildSet = (
+  defs:
+    | Array<[string, ConstructorParameters<typeof Attributes>[0] extends never ? never : { type: { type: string } }]>
+    | Record<string, { type: string }> = {},
+): AttributeSet => {
   const set = new AttributeSet();
   for (const [name, def] of Object.entries(defs as Record<string, { type: string }>)) {
-    let type;
+    let type: IntegerType | FloatType | StringType;
     switch (def.type) {
-      case 'integer': type = new IntegerType(); break;
-      case 'float':   type = new FloatType(); break;
-      case 'string':  type = new StringType(); break;
-      default:        throw new Error(`Unsupported test type: ${def.type}`);
+      case 'integer':
+        type = new IntegerType();
+        break;
+      case 'float':
+        type = new FloatType();
+        break;
+      case 'string':
+        type = new StringType();
+        break;
+      default:
+        throw new Error(`Unsupported test type: ${def.type}`);
     }
     set.define({ name, type });
   }

@@ -92,14 +92,18 @@ describe('Callbacks', () => {
       callbacks: string[] = [];
       async run(): Promise<void> {
         const ctor = this.constructor as typeof Model;
-        await ctor.runCallbacks('create', this, async () => { this.callbacks.push('create'); });
+        await ctor.runCallbacks('create', this, async () => {
+          this.callbacks.push('create');
+        });
       }
     }
     HaltsViaAbort.beforeCreate((m: HaltsViaAbort) => {
       m.callbacks.push('before_create');
       throwAbort();
     });
-    HaltsViaAbort.afterCreate((m: HaltsViaAbort) => { m.callbacks.push('after_create'); });
+    HaltsViaAbort.afterCreate((m: HaltsViaAbort) => {
+      m.callbacks.push('after_create');
+    });
     const m = new HaltsViaAbort();
     await m.run();
     expect(m.callbacks).toEqual(['before_create']);
@@ -116,8 +120,12 @@ describe('Callbacks', () => {
         });
       }
     }
-    BodyHalts.beforeCreate((m: BodyHalts) => { m.callbacks.push('before_create'); });
-    BodyHalts.afterCreate((m: BodyHalts) => { m.callbacks.push('after_create'); });
+    BodyHalts.beforeCreate((m: BodyHalts) => {
+      m.callbacks.push('before_create');
+    });
+    BodyHalts.afterCreate((m: BodyHalts) => {
+      m.callbacks.push('after_create');
+    });
     const m = new BodyHalts();
     await m.run();
     expect(m.callbacks).toEqual(['before_create', 'create']);
@@ -128,12 +136,18 @@ describe('Callbacks', () => {
       callbacks: string[] = [];
       async run(): Promise<void> {
         const ctor = this.constructor as typeof Model;
-        await ctor.runCallbacks('create', this, async () => { this.callbacks.push('create'); });
+        await ctor.runCallbacks('create', this, async () => {
+          this.callbacks.push('create');
+        });
       }
     }
     MultiArg.afterCreate(
-      (m: MultiArg) => { m.callbacks.push('one'); },
-      (m: MultiArg) => { m.callbacks.push('two'); },
+      (m: MultiArg) => {
+        m.callbacks.push('one');
+      },
+      (m: MultiArg) => {
+        m.callbacks.push('two');
+      },
     );
     const m = new MultiArg();
     await m.run();

@@ -3,8 +3,13 @@
  * which the arel MySQL visitor already emits.
  */
 
-import { Arel } from '@active-record-ts/arel';
-import { ConnectionAdapter, AdapterUnavailableError, isolationLevelSql, type TransactionOptions } from '../ConnectionAdapter';
+import type { Arel } from '@active-record-ts/arel';
+import {
+  ConnectionAdapter,
+  AdapterUnavailableError,
+  isolationLevelSql,
+  type TransactionOptions,
+} from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from '../types';
 import { MySQLAdapterVisitor } from './MySQLVisitor';
@@ -34,10 +39,7 @@ export class MySQLAdapter extends ConnectionAdapter {
     try {
       mysql = (await import('mysql2/promise')) as unknown as { createPool: (config: object) => Pool };
     } catch {
-      throw new AdapterUnavailableError(
-        'mysql2',
-        'Install the `mysql2` npm package (bun add mysql2).',
-      );
+      throw new AdapterUnavailableError('mysql2', 'Install the `mysql2` npm package (bun add mysql2).');
     }
     const baseOptions: Record<string, unknown> = { ...(this.config.options ?? {}) };
     if (this.config.url) {
@@ -139,9 +141,17 @@ export class MySQLAdapter extends ConnectionAdapter {
 
   /** MySQL DATETIME expects `YYYY-MM-DD HH:MM:SS`, not ISO 8601 with `T`/`Z`. */
   override castBind(value: unknown): unknown {
-    if (value instanceof Date) return value.toISOString().replace('T', ' ').replace('Z', '').replace(/\.\d+$/, '');
+    if (value instanceof Date)
+      return value
+        .toISOString()
+        .replace('T', ' ')
+        .replace('Z', '')
+        .replace(/\.\d+$/, '');
     if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
-      return value.replace('T', ' ').replace('Z', '').replace(/\.\d+$/, '');
+      return value
+        .replace('T', ' ')
+        .replace('Z', '')
+        .replace(/\.\d+$/, '');
     }
     if (typeof value === 'bigint') return value.toString();
     return value;
@@ -194,9 +204,7 @@ export class MySQLAdapter extends ConnectionAdapter {
        WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
        ORDER BY table_name`,
     )) as Array<{ name: string }>;
-    return rows
-      .map((r) => r.name)
-      .filter((n) => n !== 'schema_migrations' && n !== 'ar_internal_metadata');
+    return rows.map((r) => r.name).filter((n) => n !== 'schema_migrations' && n !== 'ar_internal_metadata');
   }
 
   override async indexes(tableName: string): Promise<IndexInfo[]> {
@@ -236,15 +244,28 @@ export class MySQLAdapter extends ConnectionAdapter {
          AND kcu.referenced_table_name IS NOT NULL
        ORDER BY kcu.constraint_name`,
       [tableName],
-    )) as Array<{ name: string; column_name: string; to_table: string; to_column: string; on_delete: string; on_update: string }>;
+    )) as Array<{
+      name: string;
+      column_name: string;
+      to_table: string;
+      to_column: string;
+      on_delete: string;
+      on_update: string;
+    }>;
     return rows.map((r) => ({
       name: r.name,
       fromTable: tableName,
       toTable: r.to_table,
       column: r.column_name,
       primaryKey: r.to_column,
-      onDelete: r.on_delete && r.on_delete !== 'NO ACTION' && r.on_delete !== 'RESTRICT' ? r.on_delete.toLowerCase().replace(/ /g, '_') : undefined,
-      onUpdate: r.on_update && r.on_update !== 'NO ACTION' && r.on_update !== 'RESTRICT' ? r.on_update.toLowerCase().replace(/ /g, '_') : undefined,
+      onDelete:
+        r.on_delete && r.on_delete !== 'NO ACTION' && r.on_delete !== 'RESTRICT'
+          ? r.on_delete.toLowerCase().replace(/ /g, '_')
+          : undefined,
+      onUpdate:
+        r.on_update && r.on_update !== 'NO ACTION' && r.on_update !== 'RESTRICT'
+          ? r.on_update.toLowerCase().replace(/ /g, '_')
+          : undefined,
     }));
   }
 }

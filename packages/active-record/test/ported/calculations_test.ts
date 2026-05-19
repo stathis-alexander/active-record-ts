@@ -12,8 +12,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { type Fixtures, setupFixtures, Developer } from './_fixtures';
 
 let fx: Fixtures;
-beforeAll(async () => { fx = await setupFixtures(); });
-afterAll(async () => { await fx.teardown(); });
+beforeAll(async () => {
+  fx = await setupFixtures();
+});
+afterAll(async () => {
+  await fx.teardown();
+});
 beforeEach(async () => {
   await fx.reset();
   await Developer.create({ name: 'David', salary: 80000 });
@@ -68,7 +72,7 @@ describe('Calculations — aggregates (sum/avg/min/max)', () => {
   });
 
   test('sum with grouping returns Map<groupKey, sum>', async () => {
-    const result = await Developer.all().group('salary').sum('salary') as Map<unknown, number>;
+    const result = (await Developer.all().group('salary').sum('salary')) as Map<unknown, number>;
     expect(result.get(100000)).toBe(200000);
     expect(result.get(80000)).toBe(80000);
   });
@@ -100,26 +104,26 @@ describe('Calculations — aggregates (sum/avg/min/max)', () => {
 
 describe('Calculations — grouping', () => {
   test('count grouped by a column returns a Map<key, n>', async () => {
-    const result = await Developer.all().group('salary').count() as Map<unknown, number>;
+    const result = (await Developer.all().group('salary').count()) as Map<unknown, number>;
     expect(result.get(100000)).toBe(2);
     expect(result.get(80000)).toBe(1);
     expect(result.get(150000)).toBe(1);
   });
 
   test('sum grouped by a column', async () => {
-    const result = await Developer.all().group('salary').sum('salary') as Map<unknown, number>;
+    const result = (await Developer.all().group('salary').sum('salary')) as Map<unknown, number>;
     expect(result.get(100000)).toBe(200000);
     expect(result.get(80000)).toBe(80000);
   });
 
   test('group + average', async () => {
-    const result = await Developer.all().group('salary').average('salary') as Map<unknown, number>;
+    const result = (await Developer.all().group('salary').average('salary')) as Map<unknown, number>;
     expect(result.get(100000)).toBe(100000);
   });
 
   test('group on multiple columns — key is an array of group values', async () => {
     await Developer.create({ name: 'Z', salary: 100000 });
-    const result = await Developer.all().group('salary', 'name').count() as Map<unknown, number>;
+    const result = (await Developer.all().group('salary', 'name').count()) as Map<unknown, number>;
     // Find an entry with the [100000, 'Z'] composite key.
     let found = false;
     for (const [key, count] of result) {
@@ -132,14 +136,14 @@ describe('Calculations — grouping', () => {
   });
 
   test('count({ distinct: true }) counts unique values', async () => {
-    await Developer.create({ name: 'Z', salary: 100000 });   // duplicate salary
+    await Developer.create({ name: 'Z', salary: 100000 }); // duplicate salary
     expect(await Developer.count({ distinct: true, column: 'salary' })).toBe(3);
     expect(await Developer.count('salary')).toBe(5);
   });
 });
 
 describe('Calculations — special', () => {
-  test('count with order — order doesn\'t affect the count result', async () => {
+  test("count with order — order doesn't affect the count result", async () => {
     expect(await Developer.order({ salary: 'asc' }).count()).toBe(4);
     expect(await Developer.count()).toBe(4);
   });
@@ -160,7 +164,7 @@ describe('Calculations — special', () => {
   });
 
   test('count with group + having combined', async () => {
-    const result = await Developer.all().group('salary').having(['COUNT(*) >= ?', 1]).count() as Map<unknown, number>;
+    const result = (await Developer.all().group('salary').having(['COUNT(*) >= ?', 1]).count()) as Map<unknown, number>;
     expect([...result.values()].reduce((a, b) => a + b, 0)).toBe(4);
   });
 });

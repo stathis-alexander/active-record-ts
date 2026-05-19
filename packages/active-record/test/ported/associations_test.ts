@@ -10,7 +10,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
-import { Base } from '../../src';
+import type { Base } from '../../src';
 import { type Fixtures, setupFixtures, Author, Post, Comment, Topic, Team, Membership } from './_fixtures';
 
 let fx: Fixtures;
@@ -81,7 +81,9 @@ describe('Associations — has_many', () => {
     await Entry.create({ title: 'a', author_id: b.id as number });
     await Entry.create({ title: 'b', author_id: b.id as number });
     await Entry.create({ title: 'c', author_id: b.id as number });
-    const entries = (b as unknown as { entries: { order: (...args: unknown[]) => { limit: (n: number) => Promise<Entry[]> } } }).entries;
+    const entries = (
+      b as unknown as { entries: { order: (...args: unknown[]) => { limit: (n: number) => Promise<Entry[]> } } }
+    ).entries;
     const top2 = await entries.order({ title: 'desc' } as never).limit(2);
     expect(top2.map((p) => p.readAttribute('title'))).toEqual(['c', 'b']);
   });
@@ -131,7 +133,9 @@ describe('Associations — dependent: destroy / nullify / delete_all', () => {
     Item1.useConnection(fx.adapter);
     Owner1.hasMany('items', { class: () => Item1, foreignKey: 'author_id', dependent: 'destroy' });
     let destroyed = 0;
-    Item1.beforeDestroy(() => { destroyed++; });
+    Item1.beforeDestroy(() => {
+      destroyed++;
+    });
     await Owner1.loadSchema();
     await Item1.loadSchema();
     const o = await Owner1.create({ name: 'A' });
@@ -149,7 +153,9 @@ describe('Associations — dependent: destroy / nullify / delete_all', () => {
     Item2.useConnection(fx.adapter);
     Owner2.hasMany('items', { class: () => Item2, foreignKey: 'author_id', dependent: 'delete_all' });
     let fired = 0;
-    Item2.beforeDestroy(() => { fired++; });
+    Item2.beforeDestroy(() => {
+      fired++;
+    });
     await Owner2.loadSchema();
     await Item2.loadSchema();
     const o = await Owner2.create({ name: 'A' });
@@ -387,7 +393,10 @@ describe('Associations — LEFT OUTER JOIN / eagerLoad', () => {
     // Accessing .articles is cache-hit.
     let executes = 0;
     const original = fx.adapter.execute.bind(fx.adapter);
-    fx.adapter.execute = async (sql, binds) => { executes++; return original(sql, binds); };
+    fx.adapter.execute = async (sql, binds) => {
+      executes++;
+      return original(sql, binds);
+    };
     try {
       for (const writer of writers) {
         const arts = await (writer as unknown as { articles: Promise<Article5[]> }).articles;

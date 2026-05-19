@@ -13,7 +13,7 @@ type Ctor = any;
 
 /** Get the association reflection map for a class, creating it if missing. */
 export const getAssociations = (ctor: Ctor): Map<string, AssociationReflection> => {
-  if (Object.prototype.hasOwnProperty.call(ctor, KEY)) return ctor[KEY] as Map<string, AssociationReflection>;
+  if (Object.hasOwn(ctor, KEY)) return ctor[KEY] as Map<string, AssociationReflection>;
   const parent = Object.getPrototypeOf(ctor) as Ctor;
   const inherited = parent && parent !== Function.prototype && parent.name ? getAssociations(parent) : null;
   const own = new Map<string, AssociationReflection>(inherited ?? []);

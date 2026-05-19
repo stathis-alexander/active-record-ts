@@ -136,7 +136,7 @@ const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
   const suffix = camelizeMethodSuffix(attribute);
   const findName = `findBy${suffix}`;
   const findNameOrThrow = `${findName}OrThrow`;
-  if (!Object.prototype.hasOwnProperty.call(ctor, findName)) {
+  if (!Object.hasOwn(ctor, findName)) {
     Object.defineProperty(ctor, findName, {
       configurable: true,
       writable: true,
@@ -145,7 +145,7 @@ const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
       },
     });
   }
-  if (!Object.prototype.hasOwnProperty.call(ctor, findNameOrThrow)) {
+  if (!Object.hasOwn(ctor, findNameOrThrow)) {
     Object.defineProperty(ctor, findNameOrThrow, {
       configurable: true,
       writable: true,
@@ -167,7 +167,11 @@ const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
  *
  * Mirrors Rails' `find_by_<a>_and_<b>` matcher.
  */
-const tryResolveMultiFinder = (ctor: typeof Base, methodName: string, args: unknown[]): null | { conditions: Record<string, unknown>; orThrow: boolean } => {
+const tryResolveMultiFinder = (
+  ctor: typeof Base,
+  methodName: string,
+  args: unknown[],
+): null | { conditions: Record<string, unknown>; orThrow: boolean } => {
   let m = methodName;
   const orThrow = m.endsWith('OrThrow');
   if (orThrow) m = m.slice(0, -'OrThrow'.length);
@@ -240,7 +244,11 @@ const primaryKeyConditions = (ctor: typeof Base, record: Base): Record<string, u
  * Build an arel WHERE expression that matches the record's primary key —
  * AND-joined across every PK column for composite primary keys.
  */
-const primaryKeyMatcher = (ctor: typeof Base, table: Arel.Table, record: Base): import('@active-record-ts/arel').Expression => {
+const primaryKeyMatcher = (
+  ctor: typeof Base,
+  table: Arel.Table,
+  record: Base,
+): import('@active-record-ts/arel').Expression => {
   const cols = ctor.primaryKeyColumns();
   const equalities = cols.map((col) =>
     table.attribute(col).equal(new ArelNodes.BindParam(record.readAttribute(col) as never)),
@@ -248,7 +256,10 @@ const primaryKeyMatcher = (ctor: typeof Base, table: Arel.Table, record: Base): 
   if (equalities.length === 1) return equalities[0]! as import('@active-record-ts/arel').Expression;
   let combined = equalities[0]! as unknown as import('@active-record-ts/arel').Expression;
   for (let i = 1; i < equalities.length; i++) {
-    combined = new ArelNodes.And([combined, equalities[i]! as unknown as import('@active-record-ts/arel').Expression]) as unknown as import('@active-record-ts/arel').Expression;
+    combined = new ArelNodes.And([
+      combined,
+      equalities[i]! as unknown as import('@active-record-ts/arel').Expression,
+    ]) as unknown as import('@active-record-ts/arel').Expression;
   }
   return combined;
 };
@@ -300,7 +311,12 @@ void pluralize;
 
 /** Type guard: tell adapter instances apart from raw config objects. */
 const isAdapter = (value: unknown): value is ConnectionAdapter => {
-  return !!value && typeof value === 'object' && 'adapterName' in (value as object) && typeof (value as { execute?: unknown }).execute === 'function';
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'adapterName' in (value as object) &&
+    typeof (value as { execute?: unknown }).execute === 'function'
+  );
 };
 
 /** STI class registry — maps a type-column string (e.g. `'Manager'`) to its registered subclass. */
@@ -396,15 +412,13 @@ type ClassState = {
 };
 
 const getState = (ctor: typeof Base): ClassState => {
-  if (Object.prototype.hasOwnProperty.call(ctor, ARSTATE)) {
+  if (Object.hasOwn(ctor, ARSTATE)) {
     return (ctor as unknown as { [ARSTATE]: ClassState })[ARSTATE];
   }
   // Walk the prototype chain so subclasses inherit then snapshot.
   const parent = Object.getPrototypeOf(ctor) as typeof Base | null;
   const parentState =
-    parent && parent !== (Function.prototype as unknown as typeof Base) && parent.name
-      ? getState(parent)
-      : null;
+    parent && parent !== (Function.prototype as unknown as typeof Base) && parent.name ? getState(parent) : null;
   const state: ClassState = {
     arelTable: null,
     schemaLoaded: false,
@@ -448,11 +462,11 @@ export class Base extends Model {
   static abstractClass = false;
 
   /** True after `save` has been called and succeeded at least once. */
-  declare protected _persisted: boolean;
+  protected declare _persisted: boolean;
   /** True after `destroy` has been called. */
-  declare protected _destroyed: boolean;
+  protected declare _destroyed: boolean;
   /** True when this record was loaded from a `readonly()` relation. */
-  declare protected _readonly: boolean;
+  protected declare _readonly: boolean;
 
   constructor(values: Record<string, unknown> = {}) {
     super(values);
@@ -552,10 +566,7 @@ export class Base extends Model {
    *     return User.where({ active: true }).count();
    *   });
    */
-  static async connectedTo<R>(
-    context: ConnectionContext,
-    fn: () => Promise<R>,
-  ): Promise<R> {
+  static async connectedTo<R>(context: ConnectionContext, fn: () => Promise<R>): Promise<R> {
     const prev = connectionContext.getStore();
     const merged: ConnectionContext = { ...prev, ...context };
     return connectionContext.run(merged, fn);
@@ -564,7 +575,8 @@ export class Base extends Model {
   /** Resolve the nearest configured adapter (walks the class chain). */
   static connection(): ConnectionAdapter {
     const adapter = getConnection(this);
-    if (!adapter) throw new Error(`No connection established for ${this.name} — call ${this.name}.establishConnection(...)`);
+    if (!adapter)
+      throw new Error(`No connection established for ${this.name} — call ${this.name}.establishConnection(...)`);
     return adapter;
   }
 
@@ -726,7 +738,7 @@ export class Base extends Model {
     // Abstract-class flag is non-inheriting (matches Rails). Only treat
     // the class itself as abstract when the static field was set on its
     // OWN constructor, not just inherited from an ancestor.
-    if (Object.prototype.hasOwnProperty.call(this, 'abstractClass') && this.abstractClass) return;
+    if (Object.hasOwn(this, 'abstractClass') && this.abstractClass) return;
     const conn = this.connection();
     const cols = await conn.columns(this.effectiveTableName());
     // Preserve explicit composite-PK declarations — only fall back to the
@@ -750,7 +762,9 @@ export class Base extends Model {
     type: TypeRef,
     options?: { default?: unknown },
   ): This {
-    const result = (Model.attribute as (this: This, name: string, type: TypeRef, options?: { default?: unknown }) => This).call(this, name, type, options);
+    const result = (
+      Model.attribute as (this: This, name: string, type: TypeRef, options?: { default?: unknown }) => This
+    ).call(this, name, type, options);
     defineDynamicFinders(this as unknown as typeof Base, name);
     installDynamicFinderProxy(this as unknown as typeof Base);
     return result;
@@ -775,7 +789,12 @@ export class Base extends Model {
   }
 
   /** Instantiate a record from a database row, skipping dirty tracking. */
-  static instantiate<T extends Base>(this: new (values?: Record<string, unknown>) => T, row: Record<string, unknown>): T {
+  static instantiate<T extends Base>(
+    this: new (
+      values?: Record<string, unknown>,
+    ) => T,
+    row: Record<string, unknown>,
+  ): T {
     // STI dispatch: if the row carries a recognized inheritance-column
     // value, route to the registered subclass instead of `this`.
     const baseCtor = this as unknown as typeof Base;
@@ -792,7 +811,9 @@ export class Base extends Model {
     // biome-ignore lint/suspicious/noExplicitAny: protected field access
     (record as any)._persisted = true;
     const ctor = record.constructor as typeof Base;
-    void ctor.runCallbacks('find', record, async () => { /* body */ });
+    void ctor.runCallbacks('find', record, async () => {
+      /* body */
+    });
     return record;
   }
 
@@ -835,7 +856,9 @@ export class Base extends Model {
     this: This,
     ...projections: Parameters<Relation<InstanceType<This>>['select']>
   ): Relation<InstanceType<This>> {
-    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).select(...projections);
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).select(
+      ...projections,
+    );
   }
 
   static distinct<This extends typeof Base>(this: This, value = true): Relation<InstanceType<This>> {
@@ -859,7 +882,9 @@ export class Base extends Model {
   }
 
   static leftOuterJoins<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
-    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).leftOuterJoins(...names);
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).leftOuterJoins(
+      ...names,
+    );
   }
 
   static eagerLoad<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
@@ -871,15 +896,21 @@ export class Base extends Model {
   }
 
   static annotate<This extends typeof Base>(this: This, ...comments: string[]): Relation<InstanceType<This>> {
-    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).annotate(...comments);
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).annotate(
+      ...comments,
+    );
   }
 
   static references<This extends typeof Base>(this: This, ...names: string[]): Relation<InstanceType<This>> {
-    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).references(...names);
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).references(
+      ...names,
+    );
   }
 
   static strictLoading<This extends typeof Base>(this: This, value = true): Relation<InstanceType<This>> {
-    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).strictLoading(value);
+    return new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).strictLoading(
+      value,
+    );
   }
 
   /**
@@ -912,7 +943,11 @@ export class Base extends Model {
   static async find<This extends typeof Base>(this: This, ids: readonly unknown[]): Promise<InstanceType<This>[]>;
   static async find<This extends typeof Base>(this: This, id: unknown): Promise<InstanceType<This>>;
   static async find<This extends typeof Base>(this: This, ...ids: unknown[]): Promise<InstanceType<This>[]>;
-  static async find<This extends typeof Base>(this: This, idOrIds: unknown, ...rest: unknown[]): Promise<InstanceType<This> | InstanceType<This>[]> {
+  static async find<This extends typeof Base>(
+    this: This,
+    idOrIds: unknown,
+    ...rest: unknown[]
+  ): Promise<InstanceType<This> | InstanceType<This>[]> {
     const relation = new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>);
     if (rest.length > 0) return relation.find([idOrIds, ...rest]);
     return relation.find(idOrIds as never);
@@ -926,15 +961,15 @@ export class Base extends Model {
   }
 
   static async first<This extends typeof Base>(this: This): Promise<InstanceType<This> | null> {
-    return (await new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).first()) as
-      | InstanceType<This>
-      | null;
+    return (await new Relation<InstanceType<This>>(
+      this as unknown as BaseConstructor<InstanceType<This>>,
+    ).first()) as InstanceType<This> | null;
   }
 
   static async last<This extends typeof Base>(this: This): Promise<InstanceType<This> | null> {
-    return (await new Relation<InstanceType<This>>(this as unknown as BaseConstructor<InstanceType<This>>).last()) as
-      | InstanceType<This>
-      | null;
+    return (await new Relation<InstanceType<This>>(
+      this as unknown as BaseConstructor<InstanceType<This>>,
+    ).last()) as InstanceType<This> | null;
   }
 
   static async take<This extends typeof Base>(
@@ -1001,19 +1036,34 @@ export class Base extends Model {
   // ──────────────────────────── class-level persistence ────────────────────────────
 
   /** Build (but don't save) a new record. */
-  static build<T extends Base>(this: new (values?: Record<string, unknown>) => T, values: Record<string, unknown> = {}): T {
+  static build<T extends Base>(
+    this: new (
+      values?: Record<string, unknown>,
+    ) => T,
+    values: Record<string, unknown> = {},
+  ): T {
     return new this(values);
   }
 
   /** Create a record. Returns the (possibly unsaved) instance. */
-  static async create<T extends Base>(this: new (values?: Record<string, unknown>) => T, values: Record<string, unknown> = {}): Promise<T> {
+  static async create<T extends Base>(
+    this: new (
+      values?: Record<string, unknown>,
+    ) => T,
+    values: Record<string, unknown> = {},
+  ): Promise<T> {
     const record = new this(values);
     await record.save();
     return record;
   }
 
   /** Create a record; throws `RecordInvalid` on validation failure. */
-  static async createOrThrow<T extends Base>(this: new (values?: Record<string, unknown>) => T, values: Record<string, unknown> = {}): Promise<T> {
+  static async createOrThrow<T extends Base>(
+    this: new (
+      values?: Record<string, unknown>,
+    ) => T,
+    values: Record<string, unknown> = {},
+  ): Promise<T> {
     const record = new this(values);
     await record.saveOrThrow();
     return record;
@@ -1109,13 +1159,13 @@ export class Base extends Model {
       }
       const records: InstanceType<This>[] = [];
       for (let i = 0; i < list.length; i++) {
-        const record = await (this as unknown as typeof Base).find(list[i]) as InstanceType<This>;
+        const record = (await (this as unknown as typeof Base).find(list[i])) as InstanceType<This>;
         await record.update(attrsList[i] as Record<string, unknown>);
         records.push(record);
       }
       return records;
     }
-    const record = await (this as unknown as typeof Base).find(idOrIds) as InstanceType<This>;
+    const record = (await (this as unknown as typeof Base).find(idOrIds)) as InstanceType<This>;
     await record.update(attrsOrList as Record<string, unknown>);
     return record;
   }
@@ -1147,7 +1197,10 @@ export class Base extends Model {
     input?: WhereInput<InstanceType<This>>,
   ): Promise<InstanceType<This>[]> {
     const ctor = this as unknown as BaseConstructor<InstanceType<This>>;
-    const scope = input === undefined ? new Relation<InstanceType<This>>(ctor) : new Relation<InstanceType<This>>(ctor).where(input);
+    const scope =
+      input === undefined
+        ? new Relation<InstanceType<This>>(ctor)
+        : new Relation<InstanceType<This>>(ctor).where(input);
     const records = await scope.toArray();
     for (const r of records) await r.destroy();
     return records;
@@ -1163,7 +1216,7 @@ export class Base extends Model {
     ids: unknown | readonly unknown[],
   ): Promise<InstanceType<This> | InstanceType<This>[]> {
     const list = Array.isArray(ids) ? (ids as readonly unknown[]) : [ids];
-    const records = await (this as unknown as typeof Base).find(list as readonly unknown[]) as InstanceType<This>[];
+    const records = (await (this as unknown as typeof Base).find(list as readonly unknown[])) as InstanceType<This>[];
     for (const r of records) await r.destroy();
     return Array.isArray(ids) ? records : records[0]!;
   }
@@ -1173,10 +1226,7 @@ export class Base extends Model {
    * and validations — mirrors Rails' `Model.delete([1, 2, 3])`. Returns
    * the number of rows affected.
    */
-  static async delete<This extends typeof Base>(
-    this: This,
-    ids: unknown | readonly unknown[],
-  ): Promise<number> {
+  static async delete<This extends typeof Base>(this: This, ids: unknown | readonly unknown[]): Promise<number> {
     const list = Array.isArray(ids) ? (ids as readonly unknown[]) : [ids];
     return (this as unknown as typeof Base).deleteAll({ [this.primaryKeyColumns()[0]!]: list } as never);
   }
@@ -1189,10 +1239,7 @@ export class Base extends Model {
     const queue: TxQueue = { onCommit: [], onRollback: [] };
     transactionStack.push(queue);
     try {
-      const result = await this.connection().transaction(
-        async (adapter) => fn(adapter),
-        options,
-      );
+      const result = await this.connection().transaction(async (adapter) => fn(adapter), options);
       transactionStack.pop();
       if (transactionStack.length > 0) {
         const parent = transactionStack[transactionStack.length - 1]!;
@@ -1205,7 +1252,11 @@ export class Base extends Model {
     } catch (err) {
       transactionStack.pop();
       for (const cb of queue.onRollback) {
-        try { await cb(); } catch { /* swallow secondary errors */ }
+        try {
+          await cb();
+        } catch {
+          /* swallow secondary errors */
+        }
       }
       // Rails' `Rollback` sentinel rolls back silently — callers see `undefined`.
       if (err instanceof Rollback) return undefined;
@@ -1361,7 +1412,9 @@ export class Base extends Model {
       if (schema.has(c)) this.writeAttribute(c, now);
     }
     if (this._persisted) await this.save();
-    await ctor.runCallbacks('touch', this, async () => { /* body */ });
+    await ctor.runCallbacks('touch', this, async () => {
+      /* body */
+    });
     return this;
   }
 
@@ -1439,7 +1492,10 @@ export class Base extends Model {
   }
 
   /** Apply the result of an INSERT — hydrate from RETURNING or backfill from lastInsertId. */
-  private captureInsertResult(result: { returning?: Record<string, unknown>[]; lastInsertId?: unknown }, pk: string): void {
+  private captureInsertResult(
+    result: { returning?: Record<string, unknown>[]; lastInsertId?: unknown },
+    pk: string,
+  ): void {
     if (result.returning && result.returning[0]) {
       // biome-ignore lint/suspicious/noExplicitAny: protected field access
       (this as any)._attributes.hydrate(result.returning[0]);
@@ -1492,15 +1548,36 @@ export class Base extends Model {
   ): Promise<void> {
     const ctor = this.constructor as typeof Base;
     if (transactionStack.length === 0) {
-      await ctor.runCallbacks('commit', this, async () => { /* no-op body */ }, context);
+      await ctor.runCallbacks(
+        'commit',
+        this,
+        async () => {
+          /* no-op body */
+        },
+        context,
+      );
       return;
     }
     enqueueOnCommit(async () => {
-      await ctor.runCallbacks('commit', this, async () => { /* no-op body */ }, context);
+      await ctor.runCallbacks(
+        'commit',
+        this,
+        async () => {
+          /* no-op body */
+        },
+        context,
+      );
     });
     enqueueOnRollback(async () => {
       restoreSnapshot(this, preSnapshot, context);
-      await ctor.runCallbacks('rollback', this, async () => { /* no-op body */ }, context);
+      await ctor.runCallbacks(
+        'rollback',
+        this,
+        async () => {
+          /* no-op body */
+        },
+        context,
+      );
     });
   }
 

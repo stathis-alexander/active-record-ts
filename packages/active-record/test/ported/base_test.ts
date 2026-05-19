@@ -123,7 +123,6 @@ describe('BasicsTest — finders + persistence', () => {
     expect(a.id).toBe(b.id);
     // Strict identity isn't required (we return fresh instances)
   });
-
 });
 
 describe('BasicsTest — attribute IO', () => {

@@ -25,10 +25,7 @@ import type { AssociationReflection } from './types';
  * Preload `name` (and any deeper paths separated by `.`) on `records`.
  * Returns the same records so callers can chain.
  */
-export const preloadAssociation = async (
-  records: readonly Base[],
-  name: string,
-): Promise<readonly Base[]> => {
+export const preloadAssociation = async (records: readonly Base[], name: string): Promise<readonly Base[]> => {
   if (records.length === 0) return records;
   const [head, ...rest] = name.split('.');
   if (!head) return records;
@@ -41,13 +38,13 @@ export const preloadAssociation = async (
   // Recurse with the children flattened.
   const children: Base[] = [];
   for (const r of next) {
-    const cached = (r as Base & { constructor: typeof Base });
+    const cached = r as Base & { constructor: typeof Base };
     void cached;
   }
   // Flatten children from the cache for the next hop.
   const flat: Base[] = [];
   for (const owner of records) {
-    const cached = (owner as unknown as { [k: symbol]: Map<string, Base | Base[] | null> });
+    const cached = owner as unknown as { [k: symbol]: Map<string, Base | Base[] | null> };
     void cached;
     // Use the stable helper to read the cache.
     const value = readCacheValue(owner, head);
@@ -71,7 +68,10 @@ const preloadOne = async (records: readonly Base[], reflection: AssociationRefle
   }
 };
 
-const preloadBelongsTo = async (records: readonly Base[], reflection: AssociationReflection): Promise<readonly Base[]> => {
+const preloadBelongsTo = async (
+  records: readonly Base[],
+  reflection: AssociationReflection,
+): Promise<readonly Base[]> => {
   const klass = reflection.classRef!();
   const ids = uniqDefined(records.map((r) => r.readAttribute(reflection.foreignKey)));
   if (ids.length === 0) {
@@ -89,7 +89,10 @@ const preloadBelongsTo = async (records: readonly Base[], reflection: Associatio
   return targets;
 };
 
-const preloadPolymorphicBelongsTo = async (records: readonly Base[], reflection: AssociationReflection): Promise<readonly Base[]> => {
+const preloadPolymorphicBelongsTo = async (
+  records: readonly Base[],
+  reflection: AssociationReflection,
+): Promise<readonly Base[]> => {
   // Group records by `${name}_type` so we can issue one query per concrete class.
   const buckets = new Map<string, Base[]>();
   for (const r of records) {
@@ -148,7 +151,10 @@ const preloadHasOne = async (records: readonly Base[], reflection: AssociationRe
   return targets;
 };
 
-const preloadHasMany = async (records: readonly Base[], reflection: AssociationReflection): Promise<readonly Base[]> => {
+const preloadHasMany = async (
+  records: readonly Base[],
+  reflection: AssociationReflection,
+): Promise<readonly Base[]> => {
   const klass = reflection.classRef!();
   const ids = uniqDefined(records.map((r) => r.readAttribute(reflection.primaryKey)));
   if (ids.length === 0) {
@@ -187,7 +193,9 @@ const uniqDefined = (values: unknown[]): unknown[] => {
 /** Lazy cache lookup that avoids importing the cache symbol at top of file. */
 const readCacheValue = (record: Base, name: string): Base | Base[] | null => {
   // biome-ignore lint/suspicious/noExplicitAny: read off the symbol-keyed field
-  const cache = (record as any)[Symbol.for('@active-record-ts/active-record:associationCache')] as Map<string, Base | Base[] | null> | undefined;
+  const cache = (record as any)[Symbol.for('@active-record-ts/active-record:associationCache')] as
+    | Map<string, Base | Base[] | null>
+    | undefined;
   return cache?.get(name) ?? null;
 };
 

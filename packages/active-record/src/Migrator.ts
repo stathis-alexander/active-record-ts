@@ -10,7 +10,10 @@ const TABLE = 'schema_migrations';
 const METADATA_TABLE = 'ar_internal_metadata';
 
 export class Migrator {
-  constructor(private readonly adapter: ConnectionAdapter, private readonly migrations: MigrationConstructor[]) {}
+  constructor(
+    private readonly adapter: ConnectionAdapter,
+    private readonly migrations: MigrationConstructor[],
+  ) {}
 
   /** Ensure the schema_migrations tracking table exists. */
   async ensureSchemaTable(): Promise<void> {

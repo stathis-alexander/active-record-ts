@@ -5,8 +5,14 @@
   "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
   "license": "MIT",
   "type": "module",
-  "module": "src/index.ts",
-  "files": ["src", "README.md", "LICENSE"],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stathis-alexander/active-record-ts.git",
@@ -20,15 +26,17 @@
   },
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "scripts": {
+    "build": "tsup",
+    "prepack": "tsup",
     "test": "bun test",
     "typecheck": "bun tsc --noEmit"
   }

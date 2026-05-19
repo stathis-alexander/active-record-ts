@@ -6,7 +6,7 @@
  * works whether or not docker-compose is up.
  */
 
-import { ConnectionAdapter, buildAdapter, type ConnectionConfig } from '../../src';
+import { type ConnectionAdapter, buildAdapter, type ConnectionConfig } from '../../src';
 
 type AdapterSpec = {
   name: string;

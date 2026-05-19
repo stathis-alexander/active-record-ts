@@ -13,8 +13,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { type Fixtures, setupFixtures, Topic } from './_fixtures';
 
 let fx: Fixtures;
-beforeAll(async () => { fx = await setupFixtures(); });
-afterAll(async () => { await fx.teardown(); });
+beforeAll(async () => {
+  fx = await setupFixtures();
+});
+afterAll(async () => {
+  await fx.teardown();
+});
 beforeEach(async () => {
   await fx.reset();
   await Topic.create({ title: 'A', author_name: 'one' });
@@ -150,7 +154,9 @@ describe('Relations — chainable', () => {
     Scoped2.useConnection(fx.adapter);
     await Scoped2.loadSchema();
     Scoped2.scope('ordered', () => Scoped2.order({ title: 'desc' }));
-    const top = await (Scoped2 as unknown as { ordered: () => { limit: (n: number) => Promise<Scoped2[]> } }).ordered().limit(2);
+    const top = await (Scoped2 as unknown as { ordered: () => { limit: (n: number) => Promise<Scoped2[]> } })
+      .ordered()
+      .limit(2);
     expect(top.map((r) => r.readAttribute('title'))).toEqual(['C', 'B']);
   });
   test('extending adds methods onto the returned Relation', async () => {
@@ -163,7 +169,10 @@ describe('Relations — chainable', () => {
     expect(names.sort()).toEqual(['A', 'B', 'C']);
   });
   test('group + having combination', async () => {
-    const result = await Topic.all().group('author_name').having(['COUNT(*) >= ?', 1]).count() as Map<unknown, number>;
+    const result = (await Topic.all().group('author_name').having(['COUNT(*) >= ?', 1]).count()) as Map<
+      unknown,
+      number
+    >;
     expect(result.size).toBeGreaterThan(0);
   });
 

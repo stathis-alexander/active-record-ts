@@ -95,11 +95,7 @@ export class SchemaStatements {
     await this.adapter.exec(sql);
   }
 
-  async removeColumn(
-    tableName: string,
-    name: string,
-    options: { ifExists?: boolean } = {},
-  ): Promise<void> {
+  async removeColumn(tableName: string, name: string, options: { ifExists?: boolean } = {}): Promise<void> {
     if (options.ifExists && !(await this.columnExists(tableName, name))) return;
     await this.adapter.exec(`ALTER TABLE ${this.quote(tableName)} DROP COLUMN ${this.quote(name)}`);
   }
@@ -120,12 +116,7 @@ export class SchemaStatements {
    *   3. INSERT INTO tmp SELECT ... FROM original.
    *   4. Drop original; rename tmp → original.
    */
-  async changeColumn(
-    tableName: string,
-    name: string,
-    type: ColumnType,
-    options: ColumnOptions = {},
-  ): Promise<void> {
+  async changeColumn(tableName: string, name: string, type: ColumnType, options: ColumnOptions = {}): Promise<void> {
     const adapterName = this.adapter.adapterName;
     const colSpec = this.typeForColumn({ name, type, options });
     if (adapterName === 'mysql') {
@@ -172,7 +163,9 @@ export class SchemaStatements {
 
     await this.adapter.exec(`CREATE TABLE ${this.quote(tmpName)} (\n  ${lines.join(',\n  ')}\n)`);
     const quotedCols = colNames.map((n) => this.quote(n)).join(', ');
-    await this.adapter.exec(`INSERT INTO ${this.quote(tmpName)} (${quotedCols}) SELECT ${quotedCols} FROM ${this.quote(tableName)}`);
+    await this.adapter.exec(
+      `INSERT INTO ${this.quote(tmpName)} (${quotedCols}) SELECT ${quotedCols} FROM ${this.quote(tableName)}`,
+    );
     await this.adapter.exec(`DROP TABLE ${this.quote(tableName)}`);
     await this.adapter.exec(`ALTER TABLE ${this.quote(tmpName)} RENAME TO ${this.quote(tableName)}`);
   }
@@ -223,17 +216,17 @@ const quoteDefault = (value: unknown): string => {
 };
 
 /** Map a logical column type to dialect-specific SQL. */
-export const columnTypeForAdapter = (
-  adapter: string,
-  type: ColumnType,
-  options: ColumnOptions,
-): string => {
+export const columnTypeForAdapter = (adapter: string, type: ColumnType, options: ColumnOptions): string => {
   const isMySQL = adapter === 'mysql';
   const isPG = adapter === 'postgres' || adapter === 'postgres-bun';
   const isSQLite = adapter === 'sqlite';
   switch (type) {
     case 'primary_key':
-      return isPG ? 'BIGSERIAL PRIMARY KEY' : isMySQL ? 'BIGINT AUTO_INCREMENT PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+      return isPG
+        ? 'BIGSERIAL PRIMARY KEY'
+        : isMySQL
+          ? 'BIGINT AUTO_INCREMENT PRIMARY KEY'
+          : 'INTEGER PRIMARY KEY AUTOINCREMENT';
     case 'string': {
       const limit = options.limit ?? 255;
       return `VARCHAR(${limit})`;

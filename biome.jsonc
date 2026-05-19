@@ -31,5 +31,31 @@
     "clientKind": "git",
     "enabled": true,
     "useIgnoreFile": true
+  },
+  "linter": {
+    "rules": {
+      // Relation and association proxies intentionally implement PromiseLike
+      // by defining a `then` method so consumers can `await` them. This rule
+      // catches accidentally-thenable objects; here it's deliberate.
+      "suspicious": {
+        "noThenProperty": "off"
+      },
+      "complexity": {
+        // Static methods use `new this(...)` and `this as typeof Base` to
+        // preserve the late-bound subclass type. Biome's auto-fix rewrites
+        // `this` to the literal class name, which breaks generic constructor
+        // signatures like `<T extends Base>(this: new (...) => T)`.
+        "noThisInStatic": "off"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      // Import ordering is a preference, not a correctness issue. Run
+      // `biome check --write` locally if you want imports auto-sorted.
+      "source": {
+        "organizeImports": "off"
+      }
+    }
   }
 }

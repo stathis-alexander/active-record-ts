@@ -9,7 +9,13 @@
  */
 
 import { Attributes, AttributeSet } from './AttributeSet';
-import { CallbackChain, type CallbackEvent, type CallbackFn, type AroundCallbackFn, type CallbackKind } from './Callbacks';
+import {
+  CallbackChain,
+  type CallbackEvent,
+  type CallbackFn,
+  type AroundCallbackFn,
+  type CallbackKind,
+} from './Callbacks';
 import { Errors } from './Errors';
 import { lookupType, type Type } from './Type';
 import {
@@ -63,7 +69,7 @@ type Registry<T extends Model> = {
 const getRegistry = <T extends Model>(ctor: typeof Model): Registry<T> => {
   // biome-ignore lint/suspicious/noExplicitAny: registry is constructor-owned
   const own = (ctor as any)[REGISTRY] as Registry<T> | undefined;
-  if (own && Object.prototype.hasOwnProperty.call(ctor, REGISTRY)) return own;
+  if (own && Object.hasOwn(ctor, REGISTRY)) return own;
   // Walk the prototype chain to inherit then copy down.
   const parent = Object.getPrototypeOf(ctor) as typeof Model | null;
   const parentReg = parent && parent !== Function.prototype ? getRegistry<T>(parent) : null;
@@ -113,15 +119,15 @@ const definePerAttributeDirty = (target: typeof Model, names: string[]): void =>
         this.willChange(name);
       },
       [`${camelName}PreviouslyChanged`](this: Model): boolean {
-        return Object.prototype.hasOwnProperty.call(this.savedChanges(), name);
+        return Object.hasOwn(this.savedChanges(), name);
       },
       [`${camelName}PreviousChange`](this: Model): [unknown, unknown] | null {
         const saved = this.savedChanges();
-        return Object.prototype.hasOwnProperty.call(saved, name) ? saved[name]! : null;
+        return Object.hasOwn(saved, name) ? saved[name]! : null;
       },
     };
     for (const [methodName, fn] of Object.entries(helpers)) {
-      if (Object.prototype.hasOwnProperty.call(target.prototype, methodName)) continue;
+      if (Object.hasOwn(target.prototype, methodName)) continue;
       Object.defineProperty(target.prototype, methodName, {
         configurable: true,
         enumerable: false,
@@ -137,7 +143,7 @@ const lowerFirst = (s: string): string => (s.length === 0 ? s : s.charAt(0).toLo
 /** Accessor proxy installed on subclass prototypes so `record.name` reads `attributes`. */
 const defineAccessors = (target: typeof Model, names: string[]): void => {
   for (const name of names) {
-    if (Object.prototype.hasOwnProperty.call(target.prototype, name)) continue;
+    if (Object.hasOwn(target.prototype, name)) continue;
     // Don't shadow an existing getter/setter inherited from an ancestor —
     // e.g. `Base#id` is a composite-aware getter on Base.prototype and
     // we shouldn't override it with a per-attribute accessor that always
@@ -146,7 +152,10 @@ const defineAccessors = (target: typeof Model, names: string[]): void => {
     let inheritedAccessor = false;
     while (proto) {
       const desc = Object.getOwnPropertyDescriptor(proto, name);
-      if (desc && (desc.get || desc.set)) { inheritedAccessor = true; break; }
+      if (desc && (desc.get || desc.set)) {
+        inheritedAccessor = true;
+        break;
+      }
       proto = Object.getPrototypeOf(proto);
     }
     if (inheritedAccessor) continue;
@@ -182,7 +191,9 @@ export class Model {
     // a promise so async hooks still run, but constructors can't await —
     // any errors will surface as unhandled rejections, which matches
     // Rails' "don't put expensive logic in after_initialize" expectation.
-    void reg.callbacks.run('initialize', this, async () => { /* body */ });
+    void reg.callbacks.run('initialize', this, async () => {
+      /* body */
+    });
   }
 
   // ──────────────────────────── attribute IO ────────────────────────────
@@ -234,7 +245,10 @@ export class Model {
    * Rails' `restore_attributes(['name'])`.
    */
   restoreAttributes(names?: string[]): void {
-    if (!names) return this._attributes.restore();
+    if (!names) {
+      this._attributes.restore();
+      return;
+    }
     for (const name of names) {
       this._attributes.write(name, this._attributes.was(name));
     }
@@ -250,9 +264,14 @@ export class Model {
     this.errors.clear();
     const ctor = this.constructor as typeof Model;
     const reg = getRegistry<this>(ctor);
-    await reg.callbacks.run('validation', this, async () => {
-      for (const v of reg.validators) await v.validate(this, this.errors, context);
-    }, context);
+    await reg.callbacks.run(
+      'validation',
+      this,
+      async () => {
+        for (const v of reg.validators) await v.validate(this, this.errors, context);
+      },
+      context,
+    );
     return this.errors.empty;
   }
   async isValid(context?: ValidationContext): Promise<boolean> {
@@ -303,7 +322,12 @@ export class Model {
   // ──────────────────────────── class-side configuration ────────────────────────────
 
   /** Register an attribute on this subclass. Returns the constructor for chaining. */
-  static attribute<This extends typeof Model>(this: This, name: string, type: TypeRef, options?: { default?: unknown }): This {
+  static attribute<This extends typeof Model>(
+    this: This,
+    name: string,
+    type: TypeRef,
+    options?: { default?: unknown },
+  ): This {
     const reg = getRegistry(this);
     reg.attributeSet.define({ name, type: resolveType(type), default: options?.default });
     defineAccessors(this, [name]);
@@ -341,7 +365,10 @@ export class Model {
   }
 
   /** Validators that target any of the given attribute names. */
-  static validatorsOn<This extends typeof Model>(this: This, ...attributes: string[]): ReadonlyArray<Validator<InstanceType<This>>> {
+  static validatorsOn<This extends typeof Model>(
+    this: This,
+    ...attributes: string[]
+  ): ReadonlyArray<Validator<InstanceType<This>>> {
     const wanted = new Set(attributes);
     return this.validators().filter((v) => {
       const attrs = (v as unknown as { attributes?: readonly string[] }).attributes;
@@ -380,57 +407,99 @@ export class Model {
   }
 
   /** Add a presence validator. */
-  static validatesPresenceOf<This extends typeof Model>(this: This, attribute: string, options: ValidatorOptions<InstanceType<This>> = {}): This {
+  static validatesPresenceOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: ValidatorOptions<InstanceType<This>> = {},
+  ): This {
     return this.validatesWith(new PresenceValidator(attribute, options));
   }
-  static validatesAbsenceOf<This extends typeof Model>(this: This, attribute: string, options: ValidatorOptions<InstanceType<This>> = {}): This {
+  static validatesAbsenceOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: ValidatorOptions<InstanceType<This>> = {},
+  ): This {
     return this.validatesWith(new AbsenceValidator(attribute, options));
   }
-  static validatesLengthOf<This extends typeof Model>(this: This, attribute: string, options: LengthOptions<InstanceType<This>>): This {
+  static validatesLengthOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: LengthOptions<InstanceType<This>>,
+  ): This {
     return this.validatesWith(new LengthValidator(attribute, options));
   }
-  static validatesFormatOf<This extends typeof Model>(this: This, attribute: string, options: FormatOptions<InstanceType<This>>): This {
+  static validatesFormatOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: FormatOptions<InstanceType<This>>,
+  ): This {
     return this.validatesWith(new FormatValidator(attribute, options));
   }
-  static validatesInclusionOf<This extends typeof Model>(this: This, attribute: string, options: InclusionOptions<InstanceType<This>>): This {
+  static validatesInclusionOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: InclusionOptions<InstanceType<This>>,
+  ): This {
     return this.validatesWith(new InclusionValidator(attribute, options));
   }
-  static validatesExclusionOf<This extends typeof Model>(this: This, attribute: string, options: ExclusionOptions<InstanceType<This>>): This {
+  static validatesExclusionOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: ExclusionOptions<InstanceType<This>>,
+  ): This {
     return this.validatesWith(new ExclusionValidator(attribute, options));
   }
-  static validatesNumericalityOf<This extends typeof Model>(this: This, attribute: string, options: NumericalityOptions<InstanceType<This>> = {}): This {
+  static validatesNumericalityOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: NumericalityOptions<InstanceType<This>> = {},
+  ): This {
     return this.validatesWith(new NumericalityValidator(attribute, options));
   }
-  static validatesAcceptanceOf<This extends typeof Model>(this: This, attribute: string, options: AcceptanceOptions<InstanceType<This>> = {}): This {
+  static validatesAcceptanceOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: AcceptanceOptions<InstanceType<This>> = {},
+  ): This {
     return this.validatesWith(new AcceptanceValidator(attribute, options));
   }
-  static validatesConfirmationOf<This extends typeof Model>(this: This, attribute: string, options: ConfirmationOptions<InstanceType<This>> = {}): This {
+  static validatesConfirmationOf<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    options: ConfirmationOptions<InstanceType<This>> = {},
+  ): This {
     return this.validatesWith(new ConfirmationValidator(attribute, options));
   }
 
   /**
    * Sugar mirroring Rails' `validates :name, presence: true, length: { minimum: 2 }`.
    */
-  static validates<This extends typeof Model>(this: This, attribute: string, rules: {
-    presence?: boolean | ValidatorOptions<InstanceType<This>>;
-    absence?: boolean | ValidatorOptions<InstanceType<This>>;
-    length?: LengthOptions<InstanceType<This>>;
-    format?: FormatOptions<InstanceType<This>>;
-    inclusion?: InclusionOptions<InstanceType<This>>;
-    exclusion?: ExclusionOptions<InstanceType<This>>;
-    numericality?: boolean | NumericalityOptions<InstanceType<This>>;
-    acceptance?: boolean | AcceptanceOptions<InstanceType<This>>;
-    confirmation?: boolean | ConfirmationOptions<InstanceType<This>>;
-  }): This {
+  static validates<This extends typeof Model>(
+    this: This,
+    attribute: string,
+    rules: {
+      presence?: boolean | ValidatorOptions<InstanceType<This>>;
+      absence?: boolean | ValidatorOptions<InstanceType<This>>;
+      length?: LengthOptions<InstanceType<This>>;
+      format?: FormatOptions<InstanceType<This>>;
+      inclusion?: InclusionOptions<InstanceType<This>>;
+      exclusion?: ExclusionOptions<InstanceType<This>>;
+      numericality?: boolean | NumericalityOptions<InstanceType<This>>;
+      acceptance?: boolean | AcceptanceOptions<InstanceType<This>>;
+      confirmation?: boolean | ConfirmationOptions<InstanceType<This>>;
+    },
+  ): This {
     if (rules.presence) this.validatesPresenceOf(attribute, rules.presence === true ? {} : rules.presence);
     if (rules.absence) this.validatesAbsenceOf(attribute, rules.absence === true ? {} : rules.absence);
     if (rules.length) this.validatesLengthOf(attribute, rules.length);
     if (rules.format) this.validatesFormatOf(attribute, rules.format);
     if (rules.inclusion) this.validatesInclusionOf(attribute, rules.inclusion);
     if (rules.exclusion) this.validatesExclusionOf(attribute, rules.exclusion);
-    if (rules.numericality) this.validatesNumericalityOf(attribute, rules.numericality === true ? {} : rules.numericality);
+    if (rules.numericality)
+      this.validatesNumericalityOf(attribute, rules.numericality === true ? {} : rules.numericality);
     if (rules.acceptance) this.validatesAcceptanceOf(attribute, rules.acceptance === true ? {} : rules.acceptance);
-    if (rules.confirmation) this.validatesConfirmationOf(attribute, rules.confirmation === true ? {} : rules.confirmation);
+    if (rules.confirmation)
+      this.validatesConfirmationOf(attribute, rules.confirmation === true ? {} : rules.confirmation);
     return this;
   }
 
@@ -455,14 +524,22 @@ export class Model {
   static beforeValidation<This extends typeof Model>(
     this: This,
     fn: CallbackFn<InstanceType<This>>,
-    options?: { on?: string | string[]; if?: (record: InstanceType<This>) => boolean; unless?: (record: InstanceType<This>) => boolean },
+    options?: {
+      on?: string | string[];
+      if?: (record: InstanceType<This>) => boolean;
+      unless?: (record: InstanceType<This>) => boolean;
+    },
   ): This {
     return this.setCallback('validation', 'before', fn, options);
   }
   static afterValidation<This extends typeof Model>(
     this: This,
     fn: CallbackFn<InstanceType<This>>,
-    options?: { on?: string | string[]; if?: (record: InstanceType<This>) => boolean; unless?: (record: InstanceType<This>) => boolean },
+    options?: {
+      on?: string | string[];
+      if?: (record: InstanceType<This>) => boolean;
+      unless?: (record: InstanceType<This>) => boolean;
+    },
   ): This {
     return this.setCallback('validation', 'after', fn, options);
   }
