@@ -42,11 +42,7 @@ export abstract class Migration {
 
   // ──────────────────────────── DSL surface ────────────────────────────
 
-  protected createTable(
-    name: string,
-    define: (t: TableBuilder) => void,
-    options?: CreateTableOptions,
-  ): Promise<void> {
+  protected createTable(name: string, define: (t: TableBuilder) => void, options?: CreateTableOptions): Promise<void> {
     return this.schema.createTable(name, define, options);
   }
 
@@ -75,12 +71,7 @@ export abstract class Migration {
     return this.schema.renameColumn(table, from, to);
   }
 
-  protected changeColumn(
-    table: string,
-    name: string,
-    type: ColumnType,
-    options?: ColumnOptions,
-  ): Promise<void> {
+  protected changeColumn(table: string, name: string, type: ColumnType, options?: ColumnOptions): Promise<void> {
     return this.schema.changeColumn(table, name, type, options);
   }
 

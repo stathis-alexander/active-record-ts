@@ -31,12 +31,22 @@ export type ErrorEntry = {
  */
 export class ErrorObject {
   constructor(private readonly entry: ErrorEntry) {}
-  get attribute(): string { return this.entry.attribute; }
-  get message(): string { return this.entry.message; }
-  get type(): string | undefined { return this.entry.type; }
-  get options(): Record<string, unknown> | undefined { return this.entry.options; }
+  get attribute(): string {
+    return this.entry.attribute;
+  }
+  get message(): string {
+    return this.entry.message;
+  }
+  get type(): string | undefined {
+    return this.entry.type;
+  }
+  get options(): Record<string, unknown> | undefined {
+    return this.entry.options;
+  }
   fullMessage(): string {
-    return this.entry.attribute === BASE ? this.entry.message : `${humanize(this.entry.attribute)} ${this.entry.message}`;
+    return this.entry.attribute === BASE
+      ? this.entry.message
+      : `${humanize(this.entry.attribute)} ${this.entry.message}`;
   }
   /** Internal accessor for `Errors#import` — returns the wrapped entry. */
   toEntry(): ErrorEntry {
@@ -76,7 +86,7 @@ const DEFAULT_MESSAGES: Record<string, string> = {
   empty: "can't be empty",
 };
 
-const isKnownType = (value: string): boolean => Object.prototype.hasOwnProperty.call(DEFAULT_MESSAGES, value);
+const isKnownType = (value: string): boolean => Object.hasOwn(DEFAULT_MESSAGES, value);
 
 const interpolate = (template: string, options: Record<string, unknown> = {}): string =>
   template.replace(/%\{(\w+)\}/g, (_, key) => (key in options ? String(options[key]) : `%{${key}}`));
@@ -97,8 +107,17 @@ export class Errors {
    *
    * Pass extra interpolation values or a custom `type` via the third arg.
    */
-  add(attribute: string, messageOrType: string = 'invalid', options: AddOptions & Record<string, unknown> = {}): ErrorEntry {
-    const { type: explicitType, options: explicitOptions, message: explicitMessage, ...payload } = options as {
+  add(
+    attribute: string,
+    messageOrType: string = 'invalid',
+    options: AddOptions & Record<string, unknown> = {},
+  ): ErrorEntry {
+    const {
+      type: explicitType,
+      options: explicitOptions,
+      message: explicitMessage,
+      ...payload
+    } = options as {
       type?: string;
       options?: Record<string, unknown>;
       message?: string;
@@ -108,7 +127,9 @@ export class Errors {
     let message: string;
     if (explicitType) {
       type = explicitType;
-      message = explicitMessage ?? (isKnownType(messageOrType) ? interpolate(DEFAULT_MESSAGES[messageOrType]!, mergedOptions) : messageOrType);
+      message =
+        explicitMessage ??
+        (isKnownType(messageOrType) ? interpolate(DEFAULT_MESSAGES[messageOrType]!, mergedOptions) : messageOrType);
     } else if (isKnownType(messageOrType)) {
       type = messageOrType;
       message = explicitMessage ?? interpolate(DEFAULT_MESSAGES[messageOrType]!, mergedOptions);
@@ -161,7 +182,9 @@ export class Errors {
   get messages(): Record<string, string[]> {
     const out: Record<string, string[]> = {};
     for (const entry of this.entries) {
-      (out[entry.attribute] ??= []).push(entry.message);
+      const bucket = out[entry.attribute] ?? [];
+      bucket.push(entry.message);
+      out[entry.attribute] = bucket;
     }
     return out;
   }
@@ -210,7 +233,9 @@ export class Errors {
   }
 
   fullMessagesFor(attribute: string, type?: string): string[] {
-    return this.where(attribute, type).map((e) => (attribute === BASE ? e.message : `${humanize(attribute)} ${e.message}`));
+    return this.where(attribute, type).map((e) =>
+      attribute === BASE ? e.message : `${humanize(attribute)} ${e.message}`,
+    );
   }
 
   /** Standalone full-message formatter (no entries side effect). */
@@ -221,7 +246,8 @@ export class Errors {
   /** Append every entry from `other` to this collection. */
   merge(other: Errors): this {
     if (other === this) return this;
-    for (const entry of other.entries) this.entries.push({ ...entry, options: entry.options ? { ...entry.options } : undefined });
+    for (const entry of other.entries)
+      this.entries.push({ ...entry, options: entry.options ? { ...entry.options } : undefined });
     return this;
   }
 
@@ -258,7 +284,9 @@ export class Errors {
   get details(): Record<string, Array<{ error: string | undefined } & Record<string, unknown>>> {
     const out: Record<string, Array<{ error: string | undefined } & Record<string, unknown>>> = {};
     for (const entry of this.entries) {
-      (out[entry.attribute] ??= []).push({ error: entry.type, ...(entry.options ?? {}) });
+      const bucket = out[entry.attribute] ?? [];
+      bucket.push({ error: entry.type, ...(entry.options ?? {}) });
+      out[entry.attribute] = bucket;
     }
     return out;
   }
@@ -267,7 +295,9 @@ export class Errors {
   groupByAttribute(): Record<string, ErrorObject[]> {
     const out: Record<string, ErrorObject[]> = {};
     for (const entry of this.entries) {
-      (out[entry.attribute] ??= []).push(new ErrorObject(entry));
+      const bucket = out[entry.attribute] ?? [];
+      bucket.push(new ErrorObject(entry));
+      out[entry.attribute] = bucket;
     }
     return out;
   }
@@ -293,10 +323,7 @@ export class Errors {
   }
 
   /** Import a foreign `ErrorEntry` or `ErrorObject`, optionally overriding attribute/type. */
-  import(
-    error: ErrorEntry | ErrorObject,
-    overrides: { attribute?: string; type?: string } = {},
-  ): ErrorEntry {
+  import(error: ErrorEntry | ErrorObject, overrides: { attribute?: string; type?: string } = {}): ErrorEntry {
     const base: ErrorEntry = error instanceof ErrorObject ? error.toEntry() : error;
     const next: ErrorEntry = {
       attribute: overrides.attribute ?? base.attribute,
@@ -330,7 +357,9 @@ export class Errors {
     const out: Record<string, string[]> = {};
     for (const entry of this.entries) {
       const full = entry.attribute === BASE ? entry.message : `${humanize(entry.attribute)} ${entry.message}`;
-      (out[entry.attribute] ??= []).push(full);
+      const bucket = out[entry.attribute] ?? [];
+      bucket.push(full);
+      out[entry.attribute] = bucket;
     }
     return out;
   }
@@ -393,6 +422,9 @@ const humanize = (attribute: string): string => {
   // to a single phrase: dots become underscores, then snake/camel split.
   // Matches `String#humanize` in Rails.
   const flattened = attribute.replace(/\./g, '_');
-  const spaced = flattened.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  const spaced = flattened
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };

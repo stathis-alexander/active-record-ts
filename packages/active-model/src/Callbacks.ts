@@ -69,8 +69,12 @@ export class CallbackChain<T> {
   };
 
   /** Register a new callback under `event` of `kind`. */
-  add(event: CallbackEvent, kind: CallbackKind, fn: CallbackFn<T> | AroundCallbackFn<T>,
-      options?: { if?: (record: T) => boolean; unless?: (record: T) => boolean; on?: string | string[] }): void {
+  add(
+    event: CallbackEvent,
+    kind: CallbackKind,
+    fn: CallbackFn<T> | AroundCallbackFn<T>,
+    options?: { if?: (record: T) => boolean; unless?: (record: T) => boolean; on?: string | string[] },
+  ): void {
     this.chains[event].push({ kind, fn, if: options?.if, unless: options?.unless, on: options?.on });
   }
 

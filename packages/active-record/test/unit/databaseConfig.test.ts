@@ -62,9 +62,7 @@ describe('databaseConfig', () => {
 
   test('${ENV} substitution uses process env', () => {
     process.env.AR_TEST_DB_URL = 'postgres://example';
-    const cfg = parseDatabaseConfig(
-      JSON.stringify({ production: { adapter: 'postgres', url: '${AR_TEST_DB_URL}' } }),
-    );
+    const cfg = parseDatabaseConfig(JSON.stringify({ production: { adapter: 'postgres', url: '${AR_TEST_DB_URL}' } }));
     expect(resolveEnvironment(cfg, 'production').url).toBe('postgres://example');
   });
 

@@ -80,7 +80,10 @@ const skipForNullable = (value: unknown, options: { allowNull?: boolean; allowBl
 };
 
 /** Read a value from the record by attribute name, type-safe enough. */
-const reader = <T>(attribute: string): Reader<T> => (r: T) => (r as Record<string, unknown>)[attribute];
+const reader =
+  <T>(attribute: string): Reader<T> =>
+  (r: T) =>
+    (r as Record<string, unknown>)[attribute];
 
 /**
  * Record an error, honoring `strict` if set. With `strict: true`, throws a
@@ -130,7 +133,10 @@ const recordError = <T>(
 export class BlockValidator<T> implements Validator<T> {
   readonly kind = 'block';
   readonly attributes: string[] = [];
-  constructor(private readonly fn: (record: T, errors: Errors, context?: ValidationContext) => void | Promise<void>, private readonly options: ValidatorOptions<T> = {}) {}
+  constructor(
+    private readonly fn: (record: T, errors: Errors, context?: ValidationContext) => void | Promise<void>,
+    private readonly options: ValidatorOptions<T> = {},
+  ) {}
   async validate(record: T, errors: Errors, context?: ValidationContext): Promise<void> {
     if (!shouldValidate(record, this.options, context)) return;
     await this.fn(record, errors, context);
@@ -140,7 +146,10 @@ export class BlockValidator<T> implements Validator<T> {
 export class PresenceValidator<T> implements Validator<T> {
   readonly kind = 'presence';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: ValidatorOptions<T> = {}) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: ValidatorOptions<T> = {},
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -155,7 +164,10 @@ export class PresenceValidator<T> implements Validator<T> {
 export class AbsenceValidator<T> implements Validator<T> {
   readonly kind = 'absence';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: ValidatorOptions<T> = {}) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: ValidatorOptions<T> = {},
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -180,7 +192,10 @@ export type LengthOptions<T> = ValidatorOptions<T> & {
 export class LengthValidator<T> implements Validator<T> {
   readonly kind = 'length';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: LengthOptions<T> = {}) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: LengthOptions<T> = {},
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -192,24 +207,64 @@ export class LengthValidator<T> implements Validator<T> {
     if (o.in) {
       const [min, max] = o.in;
       if (len < min) {
-        recordError(this.options, errors, this.attribute, o.tooShort ?? `is too short (minimum is ${min} characters)`, { type: 'length' }, record, value);
+        recordError(
+          this.options,
+          errors,
+          this.attribute,
+          o.tooShort ?? `is too short (minimum is ${min} characters)`,
+          { type: 'length' },
+          record,
+          value,
+        );
         return;
       }
       if (len > max) {
-        recordError(this.options, errors, this.attribute, o.tooLong ?? `is too long (maximum is ${max} characters)`, { type: 'length' }, record, value);
+        recordError(
+          this.options,
+          errors,
+          this.attribute,
+          o.tooLong ?? `is too long (maximum is ${max} characters)`,
+          { type: 'length' },
+          record,
+          value,
+        );
         return;
       }
     }
     if (o.is !== undefined && len !== o.is) {
-      recordError(this.options, errors, this.attribute, o.wrongLength ?? `is the wrong length (should be ${o.is} characters)`, { type: 'length' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        o.wrongLength ?? `is the wrong length (should be ${o.is} characters)`,
+        { type: 'length' },
+        record,
+        value,
+      );
       return;
     }
     if (o.minimum !== undefined && len < o.minimum) {
-      recordError(this.options, errors, this.attribute, o.tooShort ?? `is too short (minimum is ${o.minimum} characters)`, { type: 'length' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        o.tooShort ?? `is too short (minimum is ${o.minimum} characters)`,
+        { type: 'length' },
+        record,
+        value,
+      );
       return;
     }
     if (o.maximum !== undefined && len > o.maximum) {
-      recordError(this.options, errors, this.attribute, o.tooLong ?? `is too long (maximum is ${o.maximum} characters)`, { type: 'length' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        o.tooLong ?? `is too long (maximum is ${o.maximum} characters)`,
+        { type: 'length' },
+        record,
+        value,
+      );
       return;
     }
   }
@@ -227,7 +282,10 @@ export type FormatOptions<T> = ValidatorOptions<T> & { with?: RegExp; without?: 
 export class FormatValidator<T> implements Validator<T> {
   readonly kind = 'format';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: FormatOptions<T>) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: FormatOptions<T>,
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -249,7 +307,10 @@ export type InclusionOptions<T> = ValidatorOptions<T> & { in: readonly unknown[]
 export class InclusionValidator<T> implements Validator<T> {
   readonly kind = 'inclusion';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: InclusionOptions<T>) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: InclusionOptions<T>,
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -257,7 +318,15 @@ export class InclusionValidator<T> implements Validator<T> {
     const value = reader<T>(this.attribute)(record);
     if (skipForNullable(value, this.options)) return;
     if (!this.options.in.includes(value)) {
-      recordError(this.options, errors, this.attribute, 'is not included in the list', { type: 'inclusion' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        'is not included in the list',
+        { type: 'inclusion' },
+        record,
+        value,
+      );
     }
   }
 }
@@ -267,7 +336,10 @@ export type ExclusionOptions<T> = ValidatorOptions<T> & { in: readonly unknown[]
 export class ExclusionValidator<T> implements Validator<T> {
   readonly kind = 'exclusion';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: ExclusionOptions<T>) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: ExclusionOptions<T>,
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -294,7 +366,10 @@ export type NumericalityOptions<T> = ValidatorOptions<T> & {
 export class NumericalityValidator<T> implements Validator<T> {
   readonly kind = 'numericality';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: NumericalityOptions<T> = {}) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: NumericalityOptions<T> = {},
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -311,22 +386,64 @@ export class NumericalityValidator<T> implements Validator<T> {
       recordError(this.options, errors, this.attribute, 'must be an integer', { type: 'numericality.only_integer' });
     }
     if (o.greaterThan !== undefined && !(num > o.greaterThan)) {
-      recordError(this.options, errors, this.attribute, `must be greater than ${o.greaterThan}`, { type: 'numericality.greater_than' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        `must be greater than ${o.greaterThan}`,
+        { type: 'numericality.greater_than' },
+        record,
+        value,
+      );
     }
     if (o.greaterThanOrEqualTo !== undefined && !(num >= o.greaterThanOrEqualTo)) {
-      recordError(this.options, errors, this.attribute, `must be greater than or equal to ${o.greaterThanOrEqualTo}`, { type: 'numericality.greater_than_or_equal_to' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        `must be greater than or equal to ${o.greaterThanOrEqualTo}`,
+        { type: 'numericality.greater_than_or_equal_to' },
+        record,
+        value,
+      );
     }
     if (o.lessThan !== undefined && !(num < o.lessThan)) {
-      recordError(this.options, errors, this.attribute, `must be less than ${o.lessThan}`, { type: 'numericality.less_than' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        `must be less than ${o.lessThan}`,
+        { type: 'numericality.less_than' },
+        record,
+        value,
+      );
     }
     if (o.lessThanOrEqualTo !== undefined && !(num <= o.lessThanOrEqualTo)) {
-      recordError(this.options, errors, this.attribute, `must be less than or equal to ${o.lessThanOrEqualTo}`, { type: 'numericality.less_than_or_equal_to' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        `must be less than or equal to ${o.lessThanOrEqualTo}`,
+        { type: 'numericality.less_than_or_equal_to' },
+        record,
+        value,
+      );
     }
     if (o.equalTo !== undefined && num !== o.equalTo) {
-      recordError(this.options, errors, this.attribute, `must be equal to ${o.equalTo}`, { type: 'numericality.equal_to' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        this.attribute,
+        `must be equal to ${o.equalTo}`,
+        { type: 'numericality.equal_to' },
+        record,
+        value,
+      );
     }
-    if (o.odd && num % 2 === 0) recordError(this.options, errors, this.attribute, 'must be odd', { type: 'numericality.odd' });
-    if (o.even && num % 2 !== 0) recordError(this.options, errors, this.attribute, 'must be even', { type: 'numericality.even' });
+    if (o.odd && num % 2 === 0)
+      recordError(this.options, errors, this.attribute, 'must be odd', { type: 'numericality.odd' });
+    if (o.even && num % 2 !== 0)
+      recordError(this.options, errors, this.attribute, 'must be even', { type: 'numericality.even' });
   }
 }
 
@@ -335,7 +452,10 @@ export type AcceptanceOptions<T> = ValidatorOptions<T> & { accept?: readonly unk
 export class AcceptanceValidator<T> implements Validator<T> {
   readonly kind = 'acceptance';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: AcceptanceOptions<T> = {}) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: AcceptanceOptions<T> = {},
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -353,7 +473,10 @@ export type ConfirmationOptions<T> = ValidatorOptions<T> & { caseSensitive?: boo
 export class ConfirmationValidator<T> implements Validator<T> {
   readonly kind = 'confirmation';
   readonly attributes: string[];
-  constructor(private readonly attribute: string, private readonly options: ConfirmationOptions<T> = {}) {
+  constructor(
+    private readonly attribute: string,
+    private readonly options: ConfirmationOptions<T> = {},
+  ) {
     this.attributes = [attribute];
   }
   validate(record: T, errors: Errors, context?: ValidationContext): void {
@@ -365,7 +488,15 @@ export class ConfirmationValidator<T> implements Validator<T> {
     const b = confirmation == null ? '' : String(confirmation);
     const equal = this.options.caseSensitive === false ? a.toLowerCase() === b.toLowerCase() : a === b;
     if (!equal) {
-      recordError(this.options, errors, `${this.attribute}Confirmation`, "doesn't match", { type: 'confirmation' }, record, value);
+      recordError(
+        this.options,
+        errors,
+        `${this.attribute}Confirmation`,
+        "doesn't match",
+        { type: 'confirmation' },
+        record,
+        value,
+      );
     }
   }
 }

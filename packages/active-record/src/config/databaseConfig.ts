@@ -55,8 +55,7 @@ const expandValues = (value: unknown): unknown => {
 };
 
 /** Determine which environment to load. */
-export const currentEnvironment = (): string =>
-  process.env.AR_ENV ?? process.env.NODE_ENV ?? 'development';
+export const currentEnvironment = (): string => process.env.AR_ENV ?? process.env.NODE_ENV ?? 'development';
 
 /** Parse a database.json buffer into the raw config map. */
 export const parseDatabaseConfig = (source: string): DatabaseConfigFile => {
@@ -80,14 +79,14 @@ export const readDatabaseConfig = (path?: string): DatabaseConfigFile => {
 };
 
 /** Merge `default` into the named environment. Env keys win on conflict. */
-export const resolveEnvironment = (
-  config: DatabaseConfigFile,
-  environment: string,
-): Record<string, unknown> => {
+export const resolveEnvironment = (config: DatabaseConfigFile, environment: string): Record<string, unknown> => {
   const base = (config.default ?? {}) as Record<string, unknown>;
   const env = config[environment];
   if (!env) {
-    const known = Object.keys(config).filter((k) => k !== 'default').join(', ') || '(none)';
+    const known =
+      Object.keys(config)
+        .filter((k) => k !== 'default')
+        .join(', ') || '(none)';
     throw new Error(`Environment "${environment}" not found in database.json. Known: ${known}`);
   }
   return { ...base, ...env };

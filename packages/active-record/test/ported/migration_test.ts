@@ -200,7 +200,9 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
     const long = 'a_very_long_table_name_that_might_exceed_the_typical_64_char_limit';
     class CT extends Migration {
       static override version = '700';
-      override async up() { await this.createTable(long, (t) => t.string('x')); }
+      override async up() {
+        await this.createTable(long, (t) => t.string('x'));
+      }
     }
     await new Migrator(adapter, [CT]).up();
     expect(await adapter.tableExists(long)).toBe(true);
@@ -249,7 +251,9 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
     class ACI extends Migration {
       static override version = '900';
       override async up() {
-        await this.createTable('aci', (t) => { t.string('x'); });
+        await this.createTable('aci', (t) => {
+          t.string('x');
+        });
         // The column already exists — if_not_exists skips re-adding.
         await this.addColumn('aci', 'x', 'integer', { ifNotExists: true });
       }
@@ -299,11 +303,15 @@ describe('Migration — DSL: createTable / addColumn / removeColumn / renameColu
   test('filtering_migrations to target version (Migrator.up(target))', async () => {
     class M1 extends Migration {
       static override version = '20260101000001';
-      override async up() { await this.createTable('t1', (t) => t.string('a')); }
+      override async up() {
+        await this.createTable('t1', (t) => t.string('a'));
+      }
     }
     class M2 extends Migration {
       static override version = '20260101000002';
-      override async up() { await this.createTable('t2', (t) => t.string('a')); }
+      override async up() {
+        await this.createTable('t2', (t) => t.string('a'));
+      }
     }
     const ran = await new Migrator(adapter, [M1, M2]).up('20260101000001');
     expect(ran).toEqual(['20260101000001']);

@@ -14,8 +14,7 @@ import { buildAdapter } from '../adapters';
 import type { ConnectionAdapter } from '../ConnectionAdapter';
 import type { ConnectionConfig } from '../types';
 
-const isPostgres = (cfg: ConnectionConfig): boolean =>
-  cfg.adapter === 'postgres' || cfg.adapter === 'postgres-bun';
+const isPostgres = (cfg: ConnectionConfig): boolean => cfg.adapter === 'postgres' || cfg.adapter === 'postgres-bun';
 
 /**
  * Derive a "maintenance" ConnectionConfig — same server + credentials, but
@@ -125,10 +124,7 @@ export const dropDatabase = async (cfg: ConnectionConfig): Promise<{ dropped: bo
       }
       return { dropped: true, name };
     }
-    const rows = await adapter.execute(
-      `SELECT 1 FROM information_schema.schemata WHERE schema_name = ?`,
-      [name],
-    );
+    const rows = await adapter.execute(`SELECT 1 FROM information_schema.schemata WHERE schema_name = ?`, [name]);
     if (rows.length === 0) return { dropped: false, name };
     await adapter.exec(`DROP DATABASE ${adapter.quoteIdentifier(name)}`);
     return { dropped: true, name };

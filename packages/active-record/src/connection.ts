@@ -49,7 +49,7 @@ type Ctor = any;
 
 /** Ensure a registry exists on this class (creates one on demand). */
 const ensureRegistry = (ctor: Ctor): RoleRegistry => {
-  if (!Object.prototype.hasOwnProperty.call(ctor, REGISTRY)) {
+  if (!Object.hasOwn(ctor, REGISTRY)) {
     const fresh: RoleRegistry = { roles: new Map(), databases: new Map() };
     Object.defineProperty(ctor, REGISTRY, { value: fresh, enumerable: false, configurable: true, writable: false });
   }
@@ -60,7 +60,7 @@ const ensureRegistry = (ctor: Ctor): RoleRegistry => {
 const findRegistry = (ctor: Ctor): RoleRegistry | null => {
   let target: Ctor | null = ctor;
   while (target && target !== Function.prototype) {
-    if (Object.prototype.hasOwnProperty.call(target, REGISTRY)) return target[REGISTRY] as RoleRegistry;
+    if (Object.hasOwn(target, REGISTRY)) return target[REGISTRY] as RoleRegistry;
     target = Object.getPrototypeOf(target);
   }
   return null;
@@ -108,10 +108,13 @@ export const getConnection = (ctor: Ctor): ConnectionAdapter | null => {
   return lookupChain(ctor, (r) => r.default);
 };
 
-const lookupChain = (ctor: Ctor, pick: (r: RoleRegistry) => ConnectionAdapter | undefined): ConnectionAdapter | null => {
+const lookupChain = (
+  ctor: Ctor,
+  pick: (r: RoleRegistry) => ConnectionAdapter | undefined,
+): ConnectionAdapter | null => {
   let target: Ctor | null = ctor;
   while (target && target !== Function.prototype) {
-    if (Object.prototype.hasOwnProperty.call(target, REGISTRY)) {
+    if (Object.hasOwn(target, REGISTRY)) {
       const adapter = pick(target[REGISTRY] as RoleRegistry);
       if (adapter) return adapter;
     }
@@ -122,7 +125,7 @@ const lookupChain = (ctor: Ctor, pick: (r: RoleRegistry) => ConnectionAdapter | 
 
 /** Reset every connection slot on this class (used in tests / teardown). */
 export const clearConnection = (ctor: Ctor): void => {
-  if (Object.prototype.hasOwnProperty.call(ctor, REGISTRY)) {
+  if (Object.hasOwn(ctor, REGISTRY)) {
     delete (ctor as Record<symbol, unknown>)[REGISTRY];
   }
 };

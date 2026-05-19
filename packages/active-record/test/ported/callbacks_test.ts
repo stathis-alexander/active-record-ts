@@ -13,9 +13,15 @@ import { Base } from '../../src';
 import { type Fixtures, setupFixtures } from './_fixtures';
 
 let fx: Fixtures;
-beforeAll(async () => { fx = await setupFixtures(); });
-afterAll(async () => { await fx.teardown(); });
-beforeEach(async () => { await fx.reset(); });
+beforeAll(async () => {
+  fx = await setupFixtures();
+});
+afterAll(async () => {
+  await fx.teardown();
+});
+beforeEach(async () => {
+  await fx.reset();
+});
 
 class AuditDeveloper extends Base {
   static override tableName = 'developers';
@@ -23,14 +29,30 @@ class AuditDeveloper extends Base {
   declare salary: number;
   history: string[] = [];
 }
-AuditDeveloper.beforeValidation((m: AuditDeveloper) => { m.history.push('before_validation'); });
-AuditDeveloper.afterValidation((m: AuditDeveloper) => { m.history.push('after_validation'); });
-AuditDeveloper.beforeSave((m: AuditDeveloper) => { m.history.push('before_save'); });
-AuditDeveloper.beforeCreate((m: AuditDeveloper) => { m.history.push('before_create'); });
-AuditDeveloper.afterCreate((m: AuditDeveloper) => { m.history.push('after_create'); });
-AuditDeveloper.afterSave((m: AuditDeveloper) => { m.history.push('after_save'); });
-AuditDeveloper.beforeDestroy((m: AuditDeveloper) => { m.history.push('before_destroy'); });
-AuditDeveloper.afterDestroy((m: AuditDeveloper) => { m.history.push('after_destroy'); });
+AuditDeveloper.beforeValidation((m: AuditDeveloper) => {
+  m.history.push('before_validation');
+});
+AuditDeveloper.afterValidation((m: AuditDeveloper) => {
+  m.history.push('after_validation');
+});
+AuditDeveloper.beforeSave((m: AuditDeveloper) => {
+  m.history.push('before_save');
+});
+AuditDeveloper.beforeCreate((m: AuditDeveloper) => {
+  m.history.push('before_create');
+});
+AuditDeveloper.afterCreate((m: AuditDeveloper) => {
+  m.history.push('after_create');
+});
+AuditDeveloper.afterSave((m: AuditDeveloper) => {
+  m.history.push('after_save');
+});
+AuditDeveloper.beforeDestroy((m: AuditDeveloper) => {
+  m.history.push('before_destroy');
+});
+AuditDeveloper.afterDestroy((m: AuditDeveloper) => {
+  m.history.push('after_destroy');
+});
 
 describe('Callbacks — chain ordering on create', () => {
   test('full chain runs in order around save+create', async () => {
@@ -54,8 +76,12 @@ describe('Callbacks — chain ordering on update', () => {
     AuditDeveloper.useConnection(fx.adapter);
     await AuditDeveloper.loadSchema();
     class WithUpdate extends AuditDeveloper {}
-    WithUpdate.beforeUpdate((m: WithUpdate) => { m.history.push('before_update'); });
-    WithUpdate.afterUpdate((m: WithUpdate) => { m.history.push('after_update'); });
+    WithUpdate.beforeUpdate((m: WithUpdate) => {
+      m.history.push('before_update');
+    });
+    WithUpdate.afterUpdate((m: WithUpdate) => {
+      m.history.push('after_update');
+    });
     WithUpdate.useConnection(fx.adapter);
     await WithUpdate.loadSchema();
     const d = new WithUpdate({ name: 'X', salary: 1 });
@@ -89,7 +115,6 @@ describe('Callbacks — halt semantics', () => {
     expect(d.persisted).toBe(false);
   });
 
-
   test('before_destroy returning false halts destroy', async () => {
     class Halts extends Base {
       static override tableName = 'developers';
@@ -113,9 +138,21 @@ describe('Callbacks — on: filters', () => {
       declare name: string;
       log: string[] = [];
     }
-    WithCtx.beforeValidation((m: WithCtx) => { m.log.push('any'); });
-    WithCtx.beforeValidation((m: WithCtx) => { m.log.push('on-create'); }, { on: 'create' });
-    WithCtx.beforeValidation((m: WithCtx) => { m.log.push('on-update'); }, { on: 'update' });
+    WithCtx.beforeValidation((m: WithCtx) => {
+      m.log.push('any');
+    });
+    WithCtx.beforeValidation(
+      (m: WithCtx) => {
+        m.log.push('on-create');
+      },
+      { on: 'create' },
+    );
+    WithCtx.beforeValidation(
+      (m: WithCtx) => {
+        m.log.push('on-update');
+      },
+      { on: 'update' },
+    );
     WithCtx.useConnection(fx.adapter);
     await WithCtx.loadSchema();
 
@@ -157,8 +194,15 @@ describe('Callbacks — on: filters', () => {
       declare name: string;
       log: string[] = [];
     }
-    WithCtx.afterValidation((m: WithCtx) => { m.log.push('any'); });
-    WithCtx.afterValidation((m: WithCtx) => { m.log.push('on-create'); }, { on: 'create' });
+    WithCtx.afterValidation((m: WithCtx) => {
+      m.log.push('any');
+    });
+    WithCtx.afterValidation(
+      (m: WithCtx) => {
+        m.log.push('on-create');
+      },
+      { on: 'create' },
+    );
     WithCtx.useConnection(fx.adapter);
     await WithCtx.loadSchema();
     const m = new WithCtx({ name: 'A' });
@@ -174,7 +218,9 @@ describe('Callbacks — Proc / block / object', () => {
       declare name: string;
       fired = false;
     }
-    const fn = function (m: WithFn) { m.fired = true; };
+    const fn = (m: WithFn) => {
+      m.fired = true;
+    };
     WithFn.beforeSave(fn);
     WithFn.useConnection(fx.adapter);
     await WithFn.loadSchema();
@@ -189,7 +235,9 @@ describe('Callbacks — Proc / block / object', () => {
       declare name: string;
       fired = false;
     }
-    WithArrow.beforeSave((m: WithArrow) => { m.fired = true; });
+    WithArrow.beforeSave((m: WithArrow) => {
+      m.fired = true;
+    });
     WithArrow.useConnection(fx.adapter);
     await WithArrow.loadSchema();
     const m = new WithArrow({ name: 'A' });
@@ -219,9 +267,13 @@ describe('Callbacks — Proc / block / object', () => {
       static override tableName = 'developers';
       declare name: string;
       log: string[] = [];
-      stamp(this: WithMethod) { this.log.push('stamped'); }
+      stamp(this: WithMethod) {
+        this.log.push('stamped');
+      }
     }
-    WithMethod.beforeSave((m: WithMethod) => { m.stamp(); });
+    WithMethod.beforeSave((m: WithMethod) => {
+      m.stamp();
+    });
     WithMethod.useConnection(fx.adapter);
     await WithMethod.loadSchema();
     const m = new WithMethod({ name: 'A' });
@@ -237,9 +289,13 @@ describe('Callbacks — inheritance', () => {
       declare name: string;
       log: string[] = [];
     }
-    Parent.beforeSave((m: Parent) => { m.log.push('parent'); });
+    Parent.beforeSave((m: Parent) => {
+      m.log.push('parent');
+    });
     class Child extends Parent {}
-    Child.beforeSave((m: Child) => { m.log.push('child'); });
+    Child.beforeSave((m: Child) => {
+      m.log.push('child');
+    });
     Child.useConnection(fx.adapter);
     await Child.loadSchema();
     const c = new Child({ name: 'A' });
@@ -254,7 +310,9 @@ describe('Callbacks — inheritance', () => {
       log: string[] = [];
     }
     class C2 extends P2 {}
-    C2.beforeSave((m: C2) => { m.log.push('child-only'); });
+    C2.beforeSave((m: C2) => {
+      m.log.push('child-only');
+    });
     P2.useConnection(fx.adapter);
     C2.useConnection(fx.adapter);
     await P2.loadSchema();
@@ -277,7 +335,9 @@ describe('Callbacks — after_commit / after_rollback / after_initialize', () =>
       declare name: string;
       initialized = false;
     }
-    WithInit.afterInitialize((m: WithInit) => { m.initialized = true; });
+    WithInit.afterInitialize((m: WithInit) => {
+      m.initialized = true;
+    });
     WithInit.useConnection(fx.adapter);
     await WithInit.loadSchema();
     const m = new WithInit({ name: 'X' });
@@ -292,7 +352,9 @@ describe('Callbacks — after_commit / after_rollback / after_initialize', () =>
       declare name: string;
       foundCount = 0;
     }
-    WithFind.afterFind((m: WithFind) => { m.foundCount += 1; });
+    WithFind.afterFind((m: WithFind) => {
+      m.foundCount += 1;
+    });
     WithFind.useConnection(fx.adapter);
     await WithFind.loadSchema();
     await WithFind.create({ name: 'A' });
@@ -307,7 +369,9 @@ describe('Callbacks — after_commit / after_rollback / after_initialize', () =>
       declare name: string;
       touched = 0;
     }
-    WithTouch.afterTouch((m: WithTouch) => { m.touched += 1; });
+    WithTouch.afterTouch((m: WithTouch) => {
+      m.touched += 1;
+    });
     WithTouch.useConnection(fx.adapter);
     await WithTouch.loadSchema();
     const m = await WithTouch.create({ name: 'A' });

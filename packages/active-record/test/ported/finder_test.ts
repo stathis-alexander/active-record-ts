@@ -13,8 +13,12 @@ import { RecordNotFound } from '../../src';
 import { type Fixtures, setupFixtures, Topic, Post } from './_fixtures';
 
 let fx: Fixtures;
-beforeAll(async () => { fx = await setupFixtures(); });
-afterAll(async () => { await fx.teardown(); });
+beforeAll(async () => {
+  fx = await setupFixtures();
+});
+afterAll(async () => {
+  await fx.teardown();
+});
 beforeEach(async () => {
   await fx.reset();
   await Topic.create({ title: 'first', author_name: 'Alex' });

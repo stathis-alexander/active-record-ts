@@ -29,10 +29,7 @@ import type { Base, BaseConstructor } from './Base';
 import { buildPredicate, type WhereInput } from './predicates';
 
 /** A value usable as an ORDER BY clause — attribute, ordering node, string, or pair. */
-export type OrderInput =
-  | string
-  | Expression
-  | Record<string, 'asc' | 'desc' | 'ASC' | 'DESC'>;
+export type OrderInput = string | Expression | Record<string, 'asc' | 'desc' | 'ASC' | 'DESC'>;
 
 /** A value usable in SELECT. */
 export type SelectInput = string | Expression;
@@ -345,7 +342,14 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return this.chain((s) => {
       const left = collapseAnd(s.whereClauses);
       const right = collapseAnd(other.state.whereClauses);
-      s.whereClauses = left && right ? [new ArelNodes.Or([left, right]) as unknown as Expression] : (left ? [left] : (right ? [right] : []));
+      s.whereClauses =
+        left && right
+          ? [new ArelNodes.Or([left, right]) as unknown as Expression]
+          : left
+            ? [left]
+            : right
+              ? [right]
+              : [];
     });
   }
 
@@ -380,16 +384,16 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   only(...names: UnscopeName[]): Relation<T> {
     const keep = new Set(names);
     return this.chain((s) => {
-      if (!keep.has('where'))    s.whereClauses = [];
-      if (!keep.has('order'))    s.orderValues = [];
-      if (!keep.has('limit'))    s.limitValue = null;
-      if (!keep.has('offset'))   s.offsetValue = null;
-      if (!keep.has('select'))   s.selectValues = [];
-      if (!keep.has('group'))    s.groupValues = [];
-      if (!keep.has('having'))   s.havingClauses = [];
+      if (!keep.has('where')) s.whereClauses = [];
+      if (!keep.has('order')) s.orderValues = [];
+      if (!keep.has('limit')) s.limitValue = null;
+      if (!keep.has('offset')) s.offsetValue = null;
+      if (!keep.has('select')) s.selectValues = [];
+      if (!keep.has('group')) s.groupValues = [];
+      if (!keep.has('having')) s.havingClauses = [];
       if (!keep.has('distinct')) s.distinctValue = false;
-      if (!keep.has('lock'))     s.lockValue = null;
-      if (!keep.has('none'))     s.noneValue = false;
+      if (!keep.has('lock')) s.lockValue = null;
+      if (!keep.has('none')) s.noneValue = false;
     });
   }
 
@@ -406,16 +410,36 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return this.chain((s) => {
       for (const name of names) {
         switch (name) {
-          case 'where':    s.whereClauses = []; break;
-          case 'order':    s.orderValues = []; break;
-          case 'limit':    s.limitValue = null; break;
-          case 'offset':   s.offsetValue = null; break;
-          case 'select':   s.selectValues = []; break;
-          case 'group':    s.groupValues = []; break;
-          case 'having':   s.havingClauses = []; break;
-          case 'distinct': s.distinctValue = false; break;
-          case 'lock':     s.lockValue = null; break;
-          case 'none':     s.noneValue = false; break;
+          case 'where':
+            s.whereClauses = [];
+            break;
+          case 'order':
+            s.orderValues = [];
+            break;
+          case 'limit':
+            s.limitValue = null;
+            break;
+          case 'offset':
+            s.offsetValue = null;
+            break;
+          case 'select':
+            s.selectValues = [];
+            break;
+          case 'group':
+            s.groupValues = [];
+            break;
+          case 'having':
+            s.havingClauses = [];
+            break;
+          case 'distinct':
+            s.distinctValue = false;
+            break;
+          case 'lock':
+            s.lockValue = null;
+            break;
+          case 'none':
+            s.noneValue = false;
+            break;
         }
       }
     });
@@ -495,15 +519,15 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     if (!reflection) throw new Error(`Unknown association "${name}" on ${this.klass.name}`);
     const op = kind === 'left' ? 'LEFT OUTER JOIN' : 'INNER JOIN';
     if (reflection.kind === 'belongs_to') {
-      const target = (reflection.classRef!() as unknown) as { effectiveTableName(): string };
+      const target = reflection.classRef!() as unknown as { effectiveTableName(): string };
       const targetTable = target.effectiveTableName();
-      const own = ((this.klass as unknown) as { effectiveTableName(): string }).effectiveTableName();
+      const own = (this.klass as unknown as { effectiveTableName(): string }).effectiveTableName();
       return `${op} "${targetTable}" ON "${targetTable}"."${reflection.primaryKey}" = "${own}"."${reflection.foreignKey}"`;
     }
     // has_many / has_one — FK on the owned side
-    const target = (reflection.classRef!() as unknown) as { effectiveTableName(): string };
+    const target = reflection.classRef!() as unknown as { effectiveTableName(): string };
     const targetTable = target.effectiveTableName();
-    const own = ((this.klass as unknown) as { effectiveTableName(): string }).effectiveTableName();
+    const own = (this.klass as unknown as { effectiveTableName(): string }).effectiveTableName();
     return `${op} "${targetTable}" ON "${targetTable}"."${reflection.foreignKey}" = "${own}"."${reflection.primaryKey}"`;
   }
 
@@ -610,7 +634,9 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     return rows.length > 0;
   }
 
-  async count(columnOrOptions?: string | { distinct: boolean; column?: string }): Promise<number | Map<unknown, number>> {
+  async count(
+    columnOrOptions?: string | { distinct: boolean; column?: string },
+  ): Promise<number | Map<unknown, number>> {
     // count('email') | count() | count({ distinct: true }) | count({ distinct: true, column: 'email' })
     if (typeof columnOrOptions === 'object' && columnOrOptions !== null) {
       const expr = columnOrOptions.distinct
@@ -642,7 +668,11 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
    * clause, returns a `Map<groupKey, aggregate>` keyed by the group value;
    * otherwise returns a scalar number.
    */
-  private async aggregate(fn: string, column: string, options?: { allowNull: boolean }): Promise<number | null | Map<unknown, number | null>> {
+  private async aggregate(
+    fn: string,
+    column: string,
+    options?: { allowNull: boolean },
+  ): Promise<number | null | Map<unknown, number | null>> {
     const manager = this.buildArel();
     const groupCols = this.state.groupValues;
     const aggregateSql = `${fn}(${column})`;
@@ -666,9 +696,7 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
     const rows = await this.klass.connection().execute(sql, binds);
     const map = new Map<unknown, number | null>();
     for (const row of rows) {
-      const key = groupAliases.length === 1
-        ? row[groupAliases[0]!]
-        : groupAliases.map((a) => row[a]);
+      const key = groupAliases.length === 1 ? row[groupAliases[0]!] : groupAliases.map((a) => row[a]);
       map.set(key, coerceAggregate(row['value'], options?.allowNull));
     }
     return map;
@@ -741,14 +769,24 @@ export class Relation<T extends Base> implements PromiseLike<T[]> {
   /** When no order is set, fall back to ordering by primary key for first/last stability. */
   private defaultOrderFallback(): Expression[] {
     if (this.state.orderValues.length > 0) return [];
-    return [this.attr((this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!).asc()];
+    return [
+      this.attr((this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!).asc(),
+    ];
   }
 
   /** Compute the reversed order expressions for `last`. */
   private reverseOrders(): Expression[] {
-    if (this.state.orderValues.length === 0) return [this.attr((this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!).desc()];
+    if (this.state.orderValues.length === 0)
+      return [
+        this.attr((this.klass as unknown as { primaryKeyColumns(): readonly string[] }).primaryKeyColumns()[0]!).desc(),
+      ];
     return this.state.orderValues.map((o) => {
-      if (typeof o === 'object' && o !== null && 'reverse' in o && typeof (o as { reverse: () => Expression }).reverse === 'function') {
+      if (
+        typeof o === 'object' &&
+        o !== null &&
+        'reverse' in o &&
+        typeof (o as { reverse: () => Expression }).reverse === 'function'
+      ) {
         return (o as { reverse: () => Expression }).reverse();
       }
       return o;
@@ -794,7 +832,12 @@ const collapseAnd = (clauses: Expression[]): Expression | null => {
 };
 
 const reverseOrdering = (expr: Expression): Expression => {
-  if (expr && typeof expr === 'object' && 'reverse' in expr && typeof (expr as { reverse: () => Expression }).reverse === 'function') {
+  if (
+    expr &&
+    typeof expr === 'object' &&
+    'reverse' in expr &&
+    typeof (expr as { reverse: () => Expression }).reverse === 'function'
+  ) {
     return (expr as { reverse: () => Expression }).reverse();
   }
   // String / SQL literal order — append a `DESC` flip heuristically (best-effort).
@@ -814,7 +857,6 @@ const mentionsAnyAttribute = (node: unknown, attrs: Set<string>): boolean => {
   }
   return false;
 };
-
 
 const buildOrders = <T extends Base>(klass: BaseConstructor<T>, order: OrderInput): Expression[] => {
   if (typeof order === 'string') return [Arel.sql(order)];

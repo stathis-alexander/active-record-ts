@@ -33,10 +33,14 @@ export type IsolationLevel = 'read_uncommitted' | 'read_committed' | 'repeatable
 
 export const isolationLevelSql = (level: IsolationLevel): string => {
   switch (level) {
-    case 'read_uncommitted': return 'READ UNCOMMITTED';
-    case 'read_committed': return 'READ COMMITTED';
-    case 'repeatable_read': return 'REPEATABLE READ';
-    case 'serializable': return 'SERIALIZABLE';
+    case 'read_uncommitted':
+      return 'READ UNCOMMITTED';
+    case 'read_committed':
+      return 'READ COMMITTED';
+    case 'repeatable_read':
+      return 'REPEATABLE READ';
+    case 'serializable':
+      return 'SERIALIZABLE';
   }
 };
 

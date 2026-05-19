@@ -51,7 +51,7 @@ export const resolvePolymorphicClass = (typeName: string): BaseConstructor | nul
 /** Install a single accessor on `ctor.prototype` for the given reflection. */
 export const defineAssociationAccessor = (ctor: typeof Base, reflection: AssociationReflection): void => {
   const { name, kind } = reflection;
-  if (Object.prototype.hasOwnProperty.call(ctor.prototype, name)) return;
+  if (Object.hasOwn(ctor.prototype, name)) return;
 
   // has_many :through resolves lazily via the intermediate association at access time.
   if (reflection.through) {
@@ -131,7 +131,10 @@ const targetClass = (owner: Base, reflection: AssociationReflection): BaseConstr
     const typeName = owner.readAttribute(reflection.foreignType!) as string | null;
     if (typeName == null) return null;
     const klass = resolvePolymorphicClass(typeName);
-    if (!klass) throw new Error(`Unknown polymorphic class "${typeName}" — call Base.polymorphicAs(${JSON.stringify(typeName)}, ClassName) to register it`);
+    if (!klass)
+      throw new Error(
+        `Unknown polymorphic class "${typeName}" — call Base.polymorphicAs(${JSON.stringify(typeName)}, ClassName) to register it`,
+      );
     return klass;
   }
   if (!reflection.classRef) throw new Error(`Association "${reflection.name}" missing class reference`);

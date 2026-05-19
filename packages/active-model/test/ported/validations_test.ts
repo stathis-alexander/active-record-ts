@@ -65,13 +65,11 @@ describe('Validations', () => {
     expect(t.errors.count).toBe(2);
   });
 
-
   test('errors on custom attribute', () => {
     const t = new Topic();
     t.errors.add('fooBar', 'is invalid');
     expect(t.errors.fullMessages).toEqual(['Foo bar is invalid']);
   });
-
 
   test('errors empty after errors-on check', () => {
     const t = new Topic();
@@ -95,7 +93,9 @@ describe('Validations', () => {
   test('validates_each closure can read attributes via any reader the model exposes', async () => {
     let hits = 0;
     class Reader extends Topic {
-      getValue(attr: string) { return (this as unknown as Record<string, unknown>)[attr]; }
+      getValue(attr: string) {
+        return (this as unknown as Record<string, unknown>)[attr];
+      }
     }
     Reader.validatesEach(['title', 'content'], (record, attr, _value, errors) => {
       // Use a custom reader instead of the default attribute lookup.
@@ -185,9 +185,7 @@ describe('Validations', () => {
     });
     const t = new Topic({ authorName: 'Admiral' });
     await t.validate();
-    expect(t.errors.on('title')).toEqual([
-      'title is missing. You have failed me for the last time, Admiral.',
-    ]);
+    expect(t.errors.on('title')).toEqual(['title is missing. You have failed me for the last time, Admiral.']);
   });
 
   test('list of validators for model', () => {
@@ -247,7 +245,9 @@ describe('Validations', () => {
 
   test('validate using a callable block (already supported via Topic.validate(fn))', async () => {
     let ran = false;
-    Topic.validate((_record, _errors) => { ran = true; });
+    Topic.validate((_record, _errors) => {
+      ran = true;
+    });
     const t = new Topic();
     expect(t.errors.empty).toBe(true);
     await t.validate();
@@ -320,7 +320,6 @@ describe('Validations', () => {
     Topic.validates('title', { presence: false });
     expect(await new Topic().isValid()).toBe(true);
   });
-
 
   test('does not modify options argument', async () => {
     const options = { presence: true } as const;

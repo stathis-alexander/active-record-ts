@@ -1,9 +1,11 @@
-import { hash as bunHash } from 'bun';
-
 /**
  * Compute a stable hash of any value. If the value carries its own `hash()`
  * method (the Arel-node convention) we delegate; otherwise we string-encode
- * and run Bun's native hash. Arrays hash element-wise.
+ * and run a deterministic 32-bit FNV-1a. Arrays hash element-wise.
+ *
+ * Hashes are used internally as cache keys (e.g. in Predications.eq); they
+ * are never persisted, so any deterministic algorithm works. FNV-1a is used
+ * instead of `Bun.hash` so the compiled package runs in any ESM runtime.
  */
 export const hash = (value: unknown): number => {
   if (
@@ -23,5 +25,14 @@ export const hash = (value: unknown): number => {
   }
   if (str.length === 0) return 0;
 
-  return Number(bunHash(str));
+  return fnv1a32(str);
+};
+
+const fnv1a32 = (str: string): number => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
 };

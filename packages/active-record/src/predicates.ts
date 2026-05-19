@@ -12,11 +12,7 @@ import type { Expression, BindValue } from '@active-record-ts/arel';
 import { Base, type BaseConstructor } from './Base';
 import { lookupAssociation } from './associations/registry';
 
-export type WhereInput<_T extends Base> =
-  | Record<string, unknown>
-  | Expression
-  | string
-  | [string, ...unknown[]];
+export type WhereInput<_T extends Base> = Record<string, unknown> | Expression | string | [string, ...unknown[]];
 
 const collapse = (nodes: Expression[]): Expression => {
   if (nodes.length === 0) return new ArelNodes.True();
@@ -51,7 +47,7 @@ const buildPredicateInner = <T extends Base>(klass: BaseConstructor<T>, input: W
   for (const [name, raw] of Object.entries(input as Record<string, unknown>)) {
     // Sugar: `Post.where({ user: someUser })` resolves to
     // `WHERE user_id = someUser.id` when the association is declared.
-    if (raw instanceof Base && Object.prototype.hasOwnProperty.call(klass, Symbol.for('@active-record-ts/active-record:associations'))) {
+    if (raw instanceof Base && Object.hasOwn(klass, Symbol.for('@active-record-ts/active-record:associations'))) {
       // Skip — handled below by the reflection lookup.
     }
     const reflection = isBaseRecord(raw) ? lookupAssociation(klass, name) : null;
@@ -79,12 +75,12 @@ const buildPredicateInner = <T extends Base>(klass: BaseConstructor<T>, input: W
     }
   }
   return collapse(conditions);
-}
+};
 
 /** True when `value` is a persisted `Base` record. */
 const isBaseRecord = (value: unknown): boolean => {
   return value instanceof Base;
-};;
+};
 
 const isExpression = (value: unknown): boolean => {
   if (value == null) return false;

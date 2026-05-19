@@ -6,7 +6,10 @@
   "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
   "license": "MIT",
   "type": "module",
-  "workspaces": ["packages/*", "examples/*"],
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.0",
@@ -14,18 +17,23 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5",
     "mysql2": "^3.22.3",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "tsup": "^8.5.1",
+    "typescript": "^5"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "lint-staged": {
-    "*.{ts,tsx,json,jsonc}": ["biome check --write"]
+    "*.{ts,tsx,json,jsonc}": [
+      "biome check --write"
+    ]
   },
   "scripts": {
     "lint": "biome check",
     "typecheck": "bun tsc --noEmit",
     "test": "bun test",
+    "build": "bun run --filter '@active-record-ts/*' build",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "changeset publish",

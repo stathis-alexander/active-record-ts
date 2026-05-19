@@ -53,12 +53,22 @@ const parseArgs = (argv: string[]): { command: string; options: CliOptions } => 
       return v;
     };
     switch (arg) {
-      case '--env': options.env = next(); break;
-      case '--config': options.config = next(); break;
-      case '--migrations': options.migrations = next(); break;
-      case '--schema': options.schema = next(); break;
+      case '--env':
+        options.env = next();
+        break;
+      case '--config':
+        options.config = next();
+        break;
+      case '--migrations':
+        options.migrations = next();
+        break;
+      case '--schema':
+        options.schema = next();
+        break;
       case '--step':
-      case '--steps': options.step = Number(next()); break;
+      case '--steps':
+        options.step = Number(next());
+        break;
       default:
         throw new Error(`Unknown option "${arg}" for command "${command}"`);
     }

@@ -51,11 +51,7 @@ export type ExecuteEntry = {
 export type SchemaEntry = CreateTableEntry | AddIndexEntry | AddForeignKeyEntry | ExecuteEntry;
 
 export type SchemaBuilder = {
-  createTable: (
-    name: string,
-    define: (t: TableBuilder) => void,
-    options?: CreateTableOptions,
-  ) => void;
+  createTable: (name: string, define: (t: TableBuilder) => void, options?: CreateTableOptions) => void;
   addIndex: (table: string, columns: string | string[], options?: IndexOptions) => void;
   addForeignKey: (fromTable: string, toTable: string, options?: ForeignKeyOptions) => void;
   execute: (sql: string) => void;
@@ -106,11 +102,7 @@ const applyEntries = async (adapter: ConnectionAdapter, entries: SchemaEntry[]):
 const applyEntry = async (schema: SchemaStatements, entry: SchemaEntry): Promise<void> => {
   switch (entry.kind) {
     case 'createTable':
-      await schema.createTable(
-        entry.name,
-        (t) => replayColumns(t, entry.collected.columns),
-        entry.options,
-      );
+      await schema.createTable(entry.name, (t) => replayColumns(t, entry.collected.columns), entry.options);
       for (const idx of entry.collected.indexes) {
         await schema.addIndex(entry.name, idx.columns, idx.options);
       }

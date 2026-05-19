@@ -1,5 +1,12 @@
 export { Base, ReadOnlyRecord, RecordInvalid, RecordNotFound, RecordNotSaved, type BaseConstructor } from './Base';
-export { ConnectionAdapter, AdapterUnavailableError, Rollback, TransactionIsolationError, isolationLevelSql, resolveLogicalType } from './ConnectionAdapter';
+export {
+  ConnectionAdapter,
+  AdapterUnavailableError,
+  Rollback,
+  TransactionIsolationError,
+  isolationLevelSql,
+  resolveLogicalType,
+} from './ConnectionAdapter';
 export type { IsolationLevel, TransactionOptions } from './ConnectionAdapter';
 export {
   currentEnvironment,

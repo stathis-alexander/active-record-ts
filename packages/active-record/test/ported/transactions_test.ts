@@ -11,9 +11,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { type Fixtures, setupFixtures, Topic } from './_fixtures';
 
 let fx: Fixtures;
-beforeAll(async () => { fx = await setupFixtures(); });
-afterAll(async () => { await fx.teardown(); });
-beforeEach(async () => { await fx.reset(); });
+beforeAll(async () => {
+  fx = await setupFixtures();
+});
+afterAll(async () => {
+  await fx.teardown();
+});
+beforeEach(async () => {
+  await fx.reset();
+});
 
 describe('Transactions — basic', () => {
   test('commit on success', async () => {
@@ -74,10 +80,13 @@ describe('Transactions — nested with savepoints', () => {
     await Topic.transaction(async () => {
       await Topic.create({ title: 'outer' });
       try {
-        await Topic.transaction(async () => {
-          await Topic.create({ title: 'inner' });
-          throw new Error('rollback inner');
-        }, { requiresNew: true });
+        await Topic.transaction(
+          async () => {
+            await Topic.create({ title: 'inner' });
+            throw new Error('rollback inner');
+          },
+          { requiresNew: true },
+        );
       } catch {
         /* expected */
       }
@@ -85,7 +94,6 @@ describe('Transactions — nested with savepoints', () => {
     const titles = (await Topic.pluck<string>('title')).sort();
     expect(titles).toEqual(['outer']);
   });
-
 });
 
 describe('Transactions — Rollback sentinel', () => {
@@ -104,16 +112,18 @@ describe('Transactions — after_commit / after_rollback', () => {
   test('after_commit fires only after outermost commit', async () => {
     class WithHook extends Topic {}
     const log: string[] = [];
-    WithHook.afterCommit(() => { log.push('commit'); });
+    WithHook.afterCommit(() => {
+      log.push('commit');
+    });
     WithHook.useConnection(fx.adapter);
     await WithHook.loadSchema();
     await WithHook.transaction(async () => {
       await WithHook.create({ title: 'a' });
-      expect(log).toEqual([]);  // not yet
+      expect(log).toEqual([]); // not yet
       await WithHook.transaction(async () => {
         await WithHook.create({ title: 'b' });
       });
-      expect(log).toEqual([]);  // still not yet — outer hasn't committed
+      expect(log).toEqual([]); // still not yet — outer hasn't committed
     });
     // Now outer committed; both create hooks fire.
     expect(log).toEqual(['commit', 'commit']);
@@ -122,8 +132,12 @@ describe('Transactions — after_commit / after_rollback', () => {
   test('after_rollback fires when the transaction rolls back', async () => {
     class WithHook extends Topic {}
     const log: string[] = [];
-    WithHook.afterCommit(() => { log.push('commit'); });
-    WithHook.afterRollback(() => { log.push('rollback'); });
+    WithHook.afterCommit(() => {
+      log.push('commit');
+    });
+    WithHook.afterRollback(() => {
+      log.push('rollback');
+    });
     WithHook.useConnection(fx.adapter);
     await WithHook.loadSchema();
     try {
@@ -140,8 +154,18 @@ describe('Transactions — after_commit / after_rollback', () => {
   test('after_commit filtered by on: "create" / "update"', async () => {
     class WithHook extends Topic {}
     const log: string[] = [];
-    WithHook.afterCommit(() => { log.push('create-commit'); }, { on: 'create' });
-    WithHook.afterCommit(() => { log.push('update-commit'); }, { on: 'update' });
+    WithHook.afterCommit(
+      () => {
+        log.push('create-commit');
+      },
+      { on: 'create' },
+    );
+    WithHook.afterCommit(
+      () => {
+        log.push('update-commit');
+      },
+      { on: 'update' },
+    );
     WithHook.useConnection(fx.adapter);
     await WithHook.loadSchema();
     const t = await WithHook.create({ title: 'a' });
@@ -155,7 +179,12 @@ describe('Transactions — after_commit / after_rollback', () => {
   test('after_commit on destroy', async () => {
     class WithHook extends Topic {}
     const log: string[] = [];
-    WithHook.afterCommit(() => { log.push('destroy-commit'); }, { on: 'destroy' });
+    WithHook.afterCommit(
+      () => {
+        log.push('destroy-commit');
+      },
+      { on: 'destroy' },
+    );
     WithHook.useConnection(fx.adapter);
     await WithHook.loadSchema();
     const t = await WithHook.create({ title: 'a' });
@@ -167,7 +196,12 @@ describe('Transactions — after_commit / after_rollback', () => {
   test('afterCommit({ on: "create" }) is the after_create_commit equivalent', async () => {
     class WithCreateCommit extends Topic {}
     const log: string[] = [];
-    WithCreateCommit.afterCommit(() => { log.push('on-create'); }, { on: 'create' });
+    WithCreateCommit.afterCommit(
+      () => {
+        log.push('on-create');
+      },
+      { on: 'create' },
+    );
     WithCreateCommit.useConnection(fx.adapter);
     await WithCreateCommit.loadSchema();
     const t = await WithCreateCommit.create({ title: 'cc' });
@@ -185,24 +219,27 @@ describe('Transactions — isolation', () => {
   // matching Rails' SQLite3Adapter. Cross-adapter integration verifies
   // BEGIN ISOLATION LEVEL emission on PG/MySQL.
   test('isolation: serializable is accepted on SQLite (no-op)', async () => {
-    await Topic.transaction(async () => {
-      await Topic.create({ title: 'iso-serializable' });
-    }, { isolation: 'serializable' });
+    await Topic.transaction(
+      async () => {
+        await Topic.create({ title: 'iso-serializable' });
+      },
+      { isolation: 'serializable' },
+    );
     expect(await Topic.exists({ title: 'iso-serializable' })).toBe(true);
   });
 
   test('isolation: read_committed throws TransactionIsolationError on SQLite', async () => {
     const { TransactionIsolationError } = await import('../../src');
-    await expect(
-      Topic.transaction(async () => {}, { isolation: 'read_committed' }),
-    ).rejects.toBeInstanceOf(TransactionIsolationError);
+    await expect(Topic.transaction(async () => {}, { isolation: 'read_committed' })).rejects.toBeInstanceOf(
+      TransactionIsolationError,
+    );
   });
 
   test('isolation: repeatable_read throws TransactionIsolationError on SQLite', async () => {
     const { TransactionIsolationError } = await import('../../src');
-    await expect(
-      Topic.transaction(async () => {}, { isolation: 'repeatable_read' }),
-    ).rejects.toBeInstanceOf(TransactionIsolationError);
+    await expect(Topic.transaction(async () => {}, { isolation: 'repeatable_read' })).rejects.toBeInstanceOf(
+      TransactionIsolationError,
+    );
   });
 });
 
@@ -230,8 +267,12 @@ describe('Transactions — concurrency', () => {
   });
 
   test('sequential transactions commit independently (concurrent transactions require multiple connections — covered by multi-db tests for AsyncLocalStorage)', async () => {
-    await Topic.transaction(async () => { await Topic.create({ title: 'A-only' }); });
-    await Topic.transaction(async () => { await Topic.create({ title: 'B-only' }); });
+    await Topic.transaction(async () => {
+      await Topic.create({ title: 'A-only' });
+    });
+    await Topic.transaction(async () => {
+      await Topic.create({ title: 'B-only' });
+    });
     expect(await Topic.count()).toBe(2);
   });
 });

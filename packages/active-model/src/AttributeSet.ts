@@ -123,9 +123,8 @@ export class Attributes {
     const value = this.current.get(name);
     // Stash a deep-ish copy of the current value as the original so subsequent
     // in-place mutation to `current` is detectable as a change.
-    const snapshot = typeof value === 'object' && value !== null
-      ? (Array.isArray(value) ? [...value] : { ...value })
-      : value;
+    const snapshot =
+      typeof value === 'object' && value !== null ? (Array.isArray(value) ? [...value] : { ...value }) : value;
     this.original.set(name, snapshot);
   }
 

@@ -191,7 +191,7 @@ describe('Persistence — create / save / update / destroy', () => {
 
   test('destroy(id) returns the single record', async () => {
     const a = await Topic.create({ title: 'a' });
-    const r = await Topic.destroy(a.id) as Topic;
+    const r = (await Topic.destroy(a.id)) as Topic;
     expect(r.destroyed).toBe(true);
   });
 
