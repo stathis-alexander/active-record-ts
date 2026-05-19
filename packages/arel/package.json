@@ -6,6 +6,17 @@
   "license": "MIT",
   "type": "module",
   "module": "src/index.ts",
+  "files": ["src", "README.md", "LICENSE"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stathis-alexander/active-record-ts.git",
+    "directory": "packages/arel"
+  },
+  "bugs": "https://github.com/stathis-alexander/active-record-ts/issues",
+  "homepage": "https://github.com/stathis-alexander/active-record-ts/tree/main/packages/arel#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
