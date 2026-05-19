@@ -9,7 +9,8 @@
 
 import { Arel, Nodes as ArelNodes } from '@arelts/arel';
 import type { Expression, BindValue } from '@arelts/arel';
-import type { Base, BaseConstructor } from './Base';
+import { Base, type BaseConstructor } from './Base';
+import { lookupAssociation } from './associations/registry';
 
 export type WhereInput<_T extends Base> =
   | Record<string, unknown>
@@ -48,6 +49,23 @@ const buildPredicateInner = <T extends Base>(klass: BaseConstructor<T>, input: W
   const table = klass.arelTable();
   const conditions: Expression[] = [];
   for (const [name, raw] of Object.entries(input as Record<string, unknown>)) {
+    // Sugar: `Post.where({ user: someUser })` resolves to
+    // `WHERE user_id = someUser.id` when the association is declared.
+    if (raw instanceof Base && Object.prototype.hasOwnProperty.call(klass, Symbol.for('@arelts/active-record:associations'))) {
+      // Skip — handled below by the reflection lookup.
+    }
+    const reflection = isBaseRecord(raw) ? lookupAssociation(klass, name) : null;
+    if (reflection && reflection.kind === 'belongs_to') {
+      const target = raw as Base;
+      const fkValue = target.readAttribute(reflection.primaryKey);
+      const fkAttr = table.attribute(reflection.foreignKey);
+      conditions.push(
+        fkValue == null
+          ? fkAttr.equal(null as unknown as Expression)
+          : fkAttr.equal(new ArelNodes.BindParam(fkValue as BindValue)),
+      );
+      continue;
+    }
     const attr = table.attribute(name);
     if (raw === null || raw === undefined) {
       conditions.push(attr.equal(null as unknown as Expression));
@@ -61,7 +79,12 @@ const buildPredicateInner = <T extends Base>(klass: BaseConstructor<T>, input: W
     }
   }
   return collapse(conditions);
-};
+}
+
+/** True when `value` is a persisted `Base` record. */
+const isBaseRecord = (value: unknown): boolean => {
+  return value instanceof Base;
+};;
 
 const isExpression = (value: unknown): boolean => {
   if (value == null) return false;

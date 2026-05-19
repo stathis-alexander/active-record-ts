@@ -4,7 +4,7 @@
  */
 
 import { Arel } from '@arelts/arel';
-import { ConnectionAdapter, AdapterUnavailableError, type TransactionOptions } from '../ConnectionAdapter';
+import { ConnectionAdapter, AdapterUnavailableError, isolationLevelSql, type TransactionOptions } from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from '../types';
 import { MySQLAdapterVisitor } from './MySQLVisitor';
@@ -91,7 +91,7 @@ export class MySQLAdapter extends ConnectionAdapter {
     };
   }
 
-  async transaction<T>(fn: (adapter: this) => Promise<T>, _options?: TransactionOptions): Promise<T> {
+  async transaction<T>(fn: (adapter: this) => Promise<T>, options?: TransactionOptions): Promise<T> {
     if (!this.pool) throw new Error('MySQLAdapter is not connected — call connect() first');
     if (this.txConn) {
       const label = `sp${this.txDepth}`;
@@ -112,6 +112,9 @@ export class MySQLAdapter extends ConnectionAdapter {
     this.txConn = conn;
     this.txDepth++;
     try {
+      if (options?.isolation) {
+        await conn.query(`SET TRANSACTION ISOLATION LEVEL ${isolationLevelSql(options.isolation)}`);
+      }
       await conn.beginTransaction();
       const result = await fn(this);
       await conn.commit();

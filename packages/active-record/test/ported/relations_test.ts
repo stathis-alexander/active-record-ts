@@ -187,7 +187,14 @@ describe('Relations — chainable', () => {
     expect(rows.length).toBe(3);
   });
 
-  test.skip('readonly relation enforcement (TODO: prevent save on readonly records)', () => {});
+  test('readonly relation prevents save', async () => {
+    const { ReadOnlyRecord } = await import('../../src');
+    await Topic.create({ title: 'frozen' });
+    const records = await Topic.all().readonly();
+    const r = records[0]!;
+    r.writeAttribute('title', 'modified');
+    await expect(r.save()).rejects.toBeInstanceOf(ReadOnlyRecord);
+  });
 
   test('annotate appends a SQL comment to the query', async () => {
     const [sql] = Topic.annotate('reason: nightly job').toSql();

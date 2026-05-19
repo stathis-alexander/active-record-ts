@@ -105,12 +105,42 @@ describe('Callbacks', () => {
     expect(m.callbacks).toEqual(['before_create']);
   });
 
-  test.skip('after callbacks skipped when block returns false (TODO: body-result propagation)', () => {});
+  test('after callbacks skipped when block returns false', async () => {
+    class BodyHalts extends Model {
+      callbacks: string[] = [];
+      async run(): Promise<void> {
+        const ctor = this.constructor as typeof Model;
+        await ctor.runCallbacks('create', this, async () => {
+          this.callbacks.push('create');
+          return false;
+        });
+      }
+    }
+    BodyHalts.beforeCreate((m: BodyHalts) => { m.callbacks.push('before_create'); });
+    BodyHalts.afterCreate((m: BodyHalts) => { m.callbacks.push('after_create'); });
+    const m = new BodyHalts();
+    await m.run();
+    expect(m.callbacks).toEqual(['before_create', 'create']);
+  });
 
-  test.skip('only selects which types of callbacks should be created (TODO: user-defined events)', () => {});
-  test.skip('only with array (TODO)', () => {});
-  test.skip('only with empty array (TODO)', () => {});
+  test('after_create accepts multiple callbacks declared in one call', async () => {
+    class MultiArg extends Model {
+      callbacks: string[] = [];
+      async run(): Promise<void> {
+        const ctor = this.constructor as typeof Model;
+        await ctor.runCallbacks('create', this, async () => { this.callbacks.push('create'); });
+      }
+    }
+    MultiArg.afterCreate(
+      (m: MultiArg) => { m.callbacks.push('one'); },
+      (m: MultiArg) => { m.callbacks.push('two'); },
+    );
+    const m = new MultiArg();
+    await m.run();
+    expect(m.callbacks).toEqual(['create', 'one', 'two']);
+  });
 
-
-  test.skip('after_create callbacks with both callbacks declared in one line (TODO: multi-arg register)', () => {});
+  // User-defined callback events (`define_model_callbacks :foo, only: [...]`)
+  // remain unimplemented — we use a fixed enum of lifecycle events. Add
+  // dynamic-event support if a real consumer ever needs it.
 });

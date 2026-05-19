@@ -180,9 +180,30 @@ describe('Transactions — after_commit / after_rollback', () => {
 });
 
 describe('Transactions — isolation', () => {
-  test.skip('isolation: :read_committed (TODO: real isolation-level wiring per adapter)', () => {});
-  test.skip('isolation: :serializable (TODO: real isolation-level wiring)', () => {});
-  test.skip('isolation: :repeatable_read (TODO: real isolation-level wiring)', () => {});
+  // The default fixture runs on SQLite, which is always SERIALIZABLE. The
+  // adapter accepts `serializable` as a no-op and throws on anything else,
+  // matching Rails' SQLite3Adapter. Cross-adapter integration verifies
+  // BEGIN ISOLATION LEVEL emission on PG/MySQL.
+  test('isolation: serializable is accepted on SQLite (no-op)', async () => {
+    await Topic.transaction(async () => {
+      await Topic.create({ title: 'iso-serializable' });
+    }, { isolation: 'serializable' });
+    expect(await Topic.exists({ title: 'iso-serializable' })).toBe(true);
+  });
+
+  test('isolation: read_committed throws TransactionIsolationError on SQLite', async () => {
+    const { TransactionIsolationError } = await import('../../src');
+    await expect(
+      Topic.transaction(async () => {}, { isolation: 'read_committed' }),
+    ).rejects.toBeInstanceOf(TransactionIsolationError);
+  });
+
+  test('isolation: repeatable_read throws TransactionIsolationError on SQLite', async () => {
+    const { TransactionIsolationError } = await import('../../src');
+    await expect(
+      Topic.transaction(async () => {}, { isolation: 'repeatable_read' }),
+    ).rejects.toBeInstanceOf(TransactionIsolationError);
+  });
 });
 
 describe('Transactions — concurrency', () => {
