@@ -16,6 +16,59 @@ User.hasMany('posts', { class: () => Post });
 
 That's the whole setup — no generator to run, no `.prisma` / `.sql` files to keep in sync, no decorators or reflect-metadata.
 
+## Create, find, save
+
+```ts
+import { Base } from '@arelts/active-record';
+
+class User extends Base {
+  static override tableName = 'users';
+  declare id: number;
+  declare name: string;
+  declare email: string;
+  declare age: number;
+}
+
+await User.establishConnection({ adapter: 'sqlite', database: ':memory:' });
+await User.loadSchema();
+
+// Create — INSERTs and returns a persisted instance
+const alex = await User.create({ name: 'Alex', email: 'alex@example.com', age: 30 });
+
+// Find by primary key — throws RecordNotFound on miss
+const user = await User.find(alex.id);
+
+// Find by attributes — returns null on miss
+const sandy = await User.findBy({ email: 'sandy@example.com' });
+
+// Mutate + save — runs validations and callbacks, returns false on failure
+user.name = 'Sandy';
+await user.save();
+
+// Or assign + save in one call
+await user.update({ age: 31 });
+
+// Query — chain `where`/`order`/`limit`/... and `await` to execute
+const adults = await User
+  .where({ active: true })
+  .where({ age: [21, 22, 23] })   // array => IN
+  .order({ created_at: 'desc' })
+  .limit(10);
+```
+
+### A note on query typing
+
+The query DSL is **syntactically** typed, not **semantically** typed. TypeScript checks the *shape* of a `where` argument — `Record<string, unknown>`, a `[sql, ...binds]` tuple, or a raw SQL string — but it does **not** verify that the keys are real columns or that the values match a column's type. Both of these typecheck and only fail at runtime (or silently return nothing):
+
+```ts
+User.where({ nmae: 'Alex' });   // typo — no static error
+User.where({ age: 'thirty' });  // wrong value type — no static error
+```
+
+This is intentional: columns are discovered at runtime via `loadSchema()`, so there's no static schema for the type system to check against. If you need column- and value-level type checks on queries, reach for a different library.
+
+## Packages
+
 Three packages in this monorepo:
 
 | Package | Role |
