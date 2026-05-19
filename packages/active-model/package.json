@@ -15,7 +15,8 @@
   "bugs": "https://github.com/stathis-alexander/active-record-ts/issues",
   "homepage": "https://github.com/stathis-alexander/active-record-ts/tree/main/packages/active-model#readme",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "exports": {
     ".": {
