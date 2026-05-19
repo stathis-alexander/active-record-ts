@@ -1,6 +1,6 @@
 export { Base, ReadOnlyRecord, RecordInvalid, RecordNotFound, RecordNotSaved, type BaseConstructor } from './Base';
-export { ConnectionAdapter, AdapterUnavailableError, Rollback, resolveLogicalType } from './ConnectionAdapter';
-export type { TransactionOptions } from './ConnectionAdapter';
+export { ConnectionAdapter, AdapterUnavailableError, Rollback, TransactionIsolationError, isolationLevelSql, resolveLogicalType } from './ConnectionAdapter';
+export type { IsolationLevel, TransactionOptions } from './ConnectionAdapter';
 export { Relation } from './Relation';
 export type { OrderInput, SelectInput } from './Relation';
 export type { WhereInput } from './predicates';

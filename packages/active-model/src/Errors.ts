@@ -389,6 +389,10 @@ const matchesOptions = (actual: Record<string, unknown> | undefined, expected: R
 
 /** Rails-style humanize: split camelCase / snake_case, lower-case everything, then upcase only the first letter. */
 const humanize = (attribute: string): string => {
-  const spaced = attribute.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  // Dotted attribute names like `replies.name` (nested attributes) collapse
+  // to a single phrase: dots become underscores, then snake/camel split.
+  // Matches `String#humanize` in Rails.
+  const flattened = attribute.replace(/\./g, '_');
+  const spaced = flattened.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };

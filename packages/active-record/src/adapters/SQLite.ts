@@ -4,7 +4,7 @@
  */
 
 import { Arel } from '@arelts/arel';
-import { ConnectionAdapter, type TransactionOptions } from '../ConnectionAdapter';
+import { ConnectionAdapter, TransactionIsolationError, type TransactionOptions } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from '../types';
 import { resolveLogicalType } from '../ConnectionAdapter';
 
@@ -77,9 +77,14 @@ export class SQLiteAdapter extends ConnectionAdapter {
     };
   }
 
-  async transaction<T>(fn: (adapter: this) => Promise<T>, _options?: TransactionOptions): Promise<T> {
+  async transaction<T>(fn: (adapter: this) => Promise<T>, options?: TransactionOptions): Promise<T> {
     const db = this.requireDb();
     const label = this.txDepth === 0 ? null : `sp${this.txDepth}`;
+    if (options?.isolation && options.isolation !== 'serializable') {
+      throw new TransactionIsolationError(
+        `SQLite only supports the "serializable" transaction isolation level (got "${options.isolation}")`,
+      );
+    }
     db.exec(label ? `SAVEPOINT ${label}` : 'BEGIN');
     this.txDepth++;
     try {

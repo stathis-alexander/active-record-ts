@@ -7,7 +7,7 @@
  */
 
 import { Arel } from '@arelts/arel';
-import { ConnectionAdapter, AdapterUnavailableError, type TransactionOptions } from '../ConnectionAdapter';
+import { ConnectionAdapter, AdapterUnavailableError, isolationLevelSql, type TransactionOptions } from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from '../types';
 
@@ -82,7 +82,7 @@ export class PostgresAdapter extends ConnectionAdapter {
     return rows.length > 0 ? { rowsAffected, returning: rows } : { rowsAffected };
   }
 
-  async transaction<T>(fn: (adapter: this) => Promise<T>, _options?: TransactionOptions): Promise<T> {
+  async transaction<T>(fn: (adapter: this) => Promise<T>, options?: TransactionOptions): Promise<T> {
     if (!this.sql) throw new Error('PostgresAdapter is not connected — call connect() first');
     if (this.txClient) {
       // Nested — use savepoint
@@ -105,6 +105,9 @@ export class PostgresAdapter extends ConnectionAdapter {
       this.txClient = client;
       this.txDepth++;
       try {
+        if (options?.isolation) {
+          await client.unsafe(`SET TRANSACTION ISOLATION LEVEL ${isolationLevelSql(options.isolation)}`);
+        }
         return await fn(this);
       } finally {
         this.txClient = prev;

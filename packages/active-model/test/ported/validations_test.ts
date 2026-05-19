@@ -49,7 +49,11 @@ describe('Validations', () => {
     expect(t.errors.count).toBe(2);
   });
 
-  test.skip('errors on nested attributes expands name (TODO: dotted attribute names)', () => {});
+  test('errors on nested attributes expands name', async () => {
+    const t = new Topic();
+    t.errors.add('replies.name', "can't be blank");
+    expect(t.errors.fullMessages).toContain("Replies name can't be blank");
+  });
 
   test('errors on base', async () => {
     Topic.validatesPresenceOf('title');

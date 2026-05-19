@@ -23,7 +23,7 @@
 import { Arel, Nodes as ArelNodes } from '@arelts/arel';
 import type { Attribute as ArelAttribute, BindParamNode } from '@arelts/arel';
 import { Model, lookupType, tableize, type Type, type TypeRef } from '@arelts/active-model';
-import { Rollback, type ConnectionAdapter } from './ConnectionAdapter';
+import { Rollback, type ConnectionAdapter, type TransactionOptions } from './ConnectionAdapter';
 import { connectionContext, setRoleConnection, setDatabaseConnection, type ConnectionContext } from './connection';
 import { getConnection, setConnection } from './connection';
 import { buildAdapter } from './adapters';
@@ -1184,7 +1184,7 @@ export class Base extends Model {
   static async transaction<T>(
     this: typeof Base,
     fn: (tx: ConnectionAdapter) => Promise<T>,
-    options?: { requiresNew?: boolean },
+    options?: TransactionOptions,
   ): Promise<T | undefined> {
     const queue: TxQueue = { onCommit: [], onRollback: [] };
     transactionStack.push(queue);

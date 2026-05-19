@@ -475,11 +475,13 @@ export class Model {
   static aroundSave<This extends typeof Model>(this: This, fn: AroundCallbackFn<InstanceType<This>>): This {
     return this.setCallback('save', 'around', fn);
   }
-  static beforeCreate<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
-    return this.setCallback('create', 'before', fn);
+  static beforeCreate<This extends typeof Model>(this: This, ...fns: CallbackFn<InstanceType<This>>[]): This {
+    for (const fn of fns) this.setCallback('create', 'before', fn);
+    return this;
   }
-  static afterCreate<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
-    return this.setCallback('create', 'after', fn);
+  static afterCreate<This extends typeof Model>(this: This, ...fns: CallbackFn<InstanceType<This>>[]): This {
+    for (const fn of fns) this.setCallback('create', 'after', fn);
+    return this;
   }
   static beforeUpdate<This extends typeof Model>(this: This, fn: CallbackFn<InstanceType<This>>): This {
     return this.setCallback('update', 'before', fn);
@@ -536,7 +538,7 @@ export class Model {
     this: This,
     event: CallbackEvent,
     record: InstanceType<This>,
-    body: () => Promise<void>,
+    body: () => Promise<void | boolean>,
     context?: string,
   ): Promise<boolean> {
     return getRegistry(this).callbacks.run(event, record, body, context);

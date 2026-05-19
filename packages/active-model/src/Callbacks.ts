@@ -87,7 +87,7 @@ export class CallbackChain<T> {
    * to filter callbacks registered with `on:` — primarily used for
    * validation contexts (`create`/`update`) but available everywhere.
    */
-  async run(event: CallbackEvent, record: T, body: () => Promise<void>, context?: string): Promise<boolean> {
+  async run(event: CallbackEvent, record: T, body: () => Promise<void | boolean>, context?: string): Promise<boolean> {
     const entries = this.chains[event];
     const befores = entries.filter((e) => e.kind === 'before');
     const afters = entries.filter((e) => e.kind === 'after');
@@ -106,15 +106,31 @@ export class CallbackChain<T> {
     }
 
     // Build the inner runner as a chain of around callbacks wrapping `body`.
-    let runner: () => Promise<void> = body;
-    for (let i = arounds.length - 1; i >= 0; i--) {
-      const around = arounds[i];
-      if (!around || !guard(around, record, context)) continue;
-      const inner = runner;
-      runner = () => (around.fn as AroundCallbackFn<T>)(record, inner);
+    // Capture body's return value so after-callbacks can be skipped when it
+    // returns false (mirrors Rails' "after callbacks skipped when block
+    // returns false" behavior). When there are no around callbacks, we
+    // skip the wrapper to keep the microtask cost identical to a bare
+    // `await body()` — some callers (after_initialize) rely on that.
+    let bodyHalted = false;
+    if (arounds.length === 0) {
+      const r = await body();
+      if (r === false) bodyHalted = true;
+    } else {
+      const bodyRunner = async (): Promise<void> => {
+        const r = await body();
+        if (r === false) bodyHalted = true;
+      };
+      let runner: () => Promise<void> = bodyRunner;
+      for (let i = arounds.length - 1; i >= 0; i--) {
+        const around = arounds[i];
+        if (!around || !guard(around, record, context)) continue;
+        const inner = runner;
+        runner = () => (around.fn as AroundCallbackFn<T>)(record, inner);
+      }
+      await runner();
     }
 
-    await runner();
+    if (bodyHalted) return false;
 
     for (const entry of afters) {
       if (!guard(entry, record, context)) continue;

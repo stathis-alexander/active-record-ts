@@ -28,9 +28,26 @@ export class Rollback extends Error {
   }
 }
 
+/** SQL-standard isolation levels. */
+export type IsolationLevel = 'read_uncommitted' | 'read_committed' | 'repeatable_read' | 'serializable';
+
+export const isolationLevelSql = (level: IsolationLevel): string => {
+  switch (level) {
+    case 'read_uncommitted': return 'READ UNCOMMITTED';
+    case 'read_committed': return 'READ COMMITTED';
+    case 'repeatable_read': return 'REPEATABLE READ';
+    case 'serializable': return 'SERIALIZABLE';
+  }
+};
+
+/** Thrown when an adapter cannot honor the requested isolation level. */
+export class TransactionIsolationError extends Error {}
+
 export type TransactionOptions = {
   /** Treat nested transactions as savepoints (default). */
   requiresNew?: boolean;
+  /** Standard SQL isolation level — applies only to the outermost BEGIN. */
+  isolation?: IsolationLevel;
 };
 
 /** Lower-cased SQL-type prefix -> active-model logical type name. */
