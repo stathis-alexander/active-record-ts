@@ -9,6 +9,17 @@
   "bin": {
     "active-record": "./bin/active-record.ts"
   },
+  "files": ["src", "bin", "README.md", "LICENSE"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stathis-alexander/active-record-ts.git",
+    "directory": "packages/active-record"
+  },
+  "bugs": "https://github.com/stathis-alexander/active-record-ts/issues",
+  "homepage": "https://github.com/stathis-alexander/active-record-ts/tree/main/packages/active-record#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
