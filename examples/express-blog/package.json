@@ -1,0 +1,22 @@
+{
+  "name": "express-blog-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "db:create": "active-record db:create",
+    "db:drop": "active-record db:drop",
+    "db:migrate": "active-record db:migrate",
+    "db:rollback": "active-record db:rollback",
+    "db:schema:dump": "active-record db:schema:dump",
+    "db:schema:load": "active-record db:schema:load"
+  },
+  "dependencies": {
+    "@arelts/active-record": "workspace:*",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21"
+  }
+}

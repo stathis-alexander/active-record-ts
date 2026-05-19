@@ -6,7 +6,7 @@
 import { Arel } from '@arelts/arel';
 import { ConnectionAdapter, AdapterUnavailableError, isolationLevelSql, type TransactionOptions } from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
-import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from '../types';
+import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from '../types';
 import { MySQLAdapterVisitor } from './MySQLVisitor';
 
 // biome-ignore lint/suspicious/noExplicitAny: driver shape varies
@@ -186,5 +186,65 @@ export class MySQLAdapter extends ConnectionAdapter {
   async primaryKey(tableName: string): Promise<string | null> {
     const cols = await this.columns(tableName);
     return cols.find((c) => c.isPrimaryKey)?.name ?? null;
+  }
+
+  override async tables(): Promise<string[]> {
+    const rows = (await this.execute(
+      `SELECT table_name AS name FROM information_schema.tables
+       WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
+       ORDER BY table_name`,
+    )) as Array<{ name: string }>;
+    return rows
+      .map((r) => r.name)
+      .filter((n) => n !== 'schema_migrations' && n !== 'ar_internal_metadata');
+  }
+
+  override async indexes(tableName: string): Promise<IndexInfo[]> {
+    const rows = (await this.execute(
+      `SELECT index_name AS name, column_name AS column_name, non_unique AS non_unique, seq_in_index AS seq
+       FROM information_schema.statistics
+       WHERE table_schema = DATABASE() AND table_name = ? AND index_name <> 'PRIMARY'
+       ORDER BY index_name, seq_in_index`,
+      [tableName],
+    )) as Array<{ name: string; column_name: string; non_unique: number; seq: number }>;
+    const byName = new Map<string, IndexInfo>();
+    for (const r of rows) {
+      let entry = byName.get(r.name);
+      if (!entry) {
+        entry = { name: r.name, columns: [], unique: Number(r.non_unique) === 0 };
+        byName.set(r.name, entry);
+      }
+      entry.columns.push(r.column_name);
+    }
+    return Array.from(byName.values());
+  }
+
+  override async foreignKeys(tableName: string): Promise<ForeignKeyInfo[]> {
+    const rows = (await this.execute(
+      `SELECT kcu.constraint_name AS name,
+              kcu.column_name AS column_name,
+              kcu.referenced_table_name AS to_table,
+              kcu.referenced_column_name AS to_column,
+              rc.delete_rule AS on_delete,
+              rc.update_rule AS on_update
+       FROM information_schema.key_column_usage kcu
+       JOIN information_schema.referential_constraints rc
+         ON rc.constraint_name = kcu.constraint_name
+        AND rc.constraint_schema = kcu.table_schema
+       WHERE kcu.table_schema = DATABASE()
+         AND kcu.table_name = ?
+         AND kcu.referenced_table_name IS NOT NULL
+       ORDER BY kcu.constraint_name`,
+      [tableName],
+    )) as Array<{ name: string; column_name: string; to_table: string; to_column: string; on_delete: string; on_update: string }>;
+    return rows.map((r) => ({
+      name: r.name,
+      fromTable: tableName,
+      toTable: r.to_table,
+      column: r.column_name,
+      primaryKey: r.to_column,
+      onDelete: r.on_delete && r.on_delete !== 'NO ACTION' && r.on_delete !== 'RESTRICT' ? r.on_delete.toLowerCase().replace(/ /g, '_') : undefined,
+      onUpdate: r.on_update && r.on_update !== 'NO ACTION' && r.on_update !== 'RESTRICT' ? r.on_update.toLowerCase().replace(/ /g, '_') : undefined,
+    }));
   }
 }

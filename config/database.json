@@ -1,0 +1,18 @@
+{
+  "default": {
+    "adapter": "postgres",
+    "host": "localhost",
+    "port": 54329,
+    "username": "arelts",
+    "password": "arelts"
+  },
+  "development": {
+    "database": "arelts_development"
+  },
+  "test": {
+    "database": "arelts_test"
+  },
+  "production": {
+    "url": "${DATABASE_URL}"
+  }
+}

@@ -6,7 +6,7 @@
 import { Arel } from '@arelts/arel';
 import { ConnectionAdapter, AdapterUnavailableError, isolationLevelSql, type TransactionOptions } from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
-import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from '../types';
+import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from '../types';
 
 // biome-ignore lint/suspicious/noExplicitAny: Bun.SQL surface is dynamic
 type BunSQL = any;
@@ -152,6 +152,72 @@ export class PostgresBunAdapter extends ConnectionAdapter {
   async primaryKey(tableName: string): Promise<string | null> {
     const keys = await this.primaryKeys(tableName);
     return keys[0] ?? null;
+  }
+
+  override async tables(): Promise<string[]> {
+    const rows = (await this.execute(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = ANY (current_schemas(false))
+         AND table_type = 'BASE TABLE'
+       ORDER BY table_name`,
+    )) as Array<{ table_name: string }>;
+    return rows
+      .map((r) => r.table_name)
+      .filter((n) => n !== 'schema_migrations' && n !== 'ar_internal_metadata');
+  }
+
+  override async indexes(tableName: string): Promise<IndexInfo[]> {
+    const rows = (await this.execute(
+      `SELECT i.relname AS name,
+              ix.indisunique AS is_unique,
+              array(
+                SELECT a.attname
+                FROM unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord)
+                JOIN pg_attribute a ON a.attrelid = ix.indrelid AND a.attnum = k.attnum
+                ORDER BY k.ord
+              ) AS columns
+       FROM pg_class t
+       JOIN pg_index ix ON t.oid = ix.indrelid
+       JOIN pg_class i ON i.oid = ix.indexrelid
+       JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE t.relname = $1
+         AND n.nspname = ANY (current_schemas(false))
+         AND ix.indisprimary = false
+       ORDER BY i.relname`,
+      [tableName],
+    )) as Array<{ name: string; is_unique: boolean; columns: string[] }>;
+    return rows.map((r) => ({ name: r.name, columns: r.columns, unique: r.is_unique }));
+  }
+
+  override async foreignKeys(tableName: string): Promise<ForeignKeyInfo[]> {
+    const rows = (await this.execute(
+      `SELECT tc.constraint_name AS name,
+              kcu.column_name AS column,
+              ccu.table_name AS to_table,
+              ccu.column_name AS to_column,
+              rc.delete_rule AS on_delete,
+              rc.update_rule AS on_update
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.key_column_usage kcu
+         ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+       JOIN information_schema.referential_constraints rc
+         ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema
+       JOIN information_schema.constraint_column_usage ccu
+         ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+       WHERE tc.table_name = $1
+         AND tc.constraint_type = 'FOREIGN KEY'
+       ORDER BY tc.constraint_name`,
+      [tableName],
+    )) as Array<{ name: string; column: string; to_table: string; to_column: string; on_delete: string; on_update: string }>;
+    return rows.map((r) => ({
+      name: r.name,
+      fromTable: tableName,
+      toTable: r.to_table,
+      column: r.column,
+      primaryKey: r.to_column,
+      onDelete: r.on_delete && r.on_delete !== 'NO ACTION' ? r.on_delete.toLowerCase().replace(/ /g, '_') : undefined,
+      onUpdate: r.on_update && r.on_update !== 'NO ACTION' ? r.on_update.toLowerCase().replace(/ /g, '_') : undefined,
+    }));
   }
 
   private async primaryKeys(tableName: string): Promise<string[]> {

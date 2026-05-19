@@ -1,12 +1,12 @@
 {
-  "name": "arelts-workspace",
+  "name": "active-record-ts",
   "version": "1.0.0",
   "private": true,
-  "description": "Monorepo for arel, active-model, and active-record TypeScript ports of the Rails libraries.",
+  "description": "TypeScript port of Rails ActiveRecord. Monorepo for arel, active-model, and active-record.",
   "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
   "license": "MIT",
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "examples/*"],
   "devDependencies": {
     "@types/bun": "latest",
     "husky": "^9.1.7",
@@ -28,6 +28,12 @@
     "test:active-model": "bun test --cwd packages/active-model",
     "test:active-record": "bun test --cwd packages/active-record",
     "db:up": "docker compose -f docker/docker-compose.yml up -d",
-    "db:down": "docker compose -f docker/docker-compose.yml down -v"
+    "db:down": "docker compose -f docker/docker-compose.yml down -v",
+    "db:create": "bun packages/active-record/bin/active-record.ts db:create",
+    "db:drop": "bun packages/active-record/bin/active-record.ts db:drop",
+    "db:migrate": "bun packages/active-record/bin/active-record.ts db:migrate",
+    "db:rollback": "bun packages/active-record/bin/active-record.ts db:rollback",
+    "db:schema:dump": "bun packages/active-record/bin/active-record.ts db:schema:dump",
+    "db:schema:load": "bun packages/active-record/bin/active-record.ts db:schema:load"
   }
 }

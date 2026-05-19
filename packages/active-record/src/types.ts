@@ -46,3 +46,21 @@ export type ColumnInfo = {
   default: unknown;
   isPrimaryKey: boolean;
 };
+
+/** Reflected index metadata returned by `indexes()`. */
+export type IndexInfo = {
+  name: string;
+  columns: string[];
+  unique: boolean;
+};
+
+/** Reflected foreign-key metadata returned by `foreignKeys()`. */
+export type ForeignKeyInfo = {
+  name: string;
+  fromTable: string;
+  toTable: string;
+  column: string;
+  primaryKey: string;
+  onDelete?: string;
+  onUpdate?: string;
+};

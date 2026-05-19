@@ -1,6 +1,16 @@
 export { Base, ReadOnlyRecord, RecordInvalid, RecordNotFound, RecordNotSaved, type BaseConstructor } from './Base';
 export { ConnectionAdapter, AdapterUnavailableError, Rollback, TransactionIsolationError, isolationLevelSql, resolveLogicalType } from './ConnectionAdapter';
 export type { IsolationLevel, TransactionOptions } from './ConnectionAdapter';
+export {
+  currentEnvironment,
+  loadConnectionConfig,
+  parseDatabaseConfig,
+  readDatabaseConfig,
+  resolveEnvironment,
+  toConnectionConfig,
+  type DatabaseConfigFile,
+} from './config/databaseConfig';
+export { createDatabase, dropDatabase, databaseNameFor } from './admin/database';
 export { Relation } from './Relation';
 export type { OrderInput, SelectInput } from './Relation';
 export type { WhereInput } from './predicates';
@@ -11,7 +21,7 @@ export {
   PostgresBunAdapter,
   SQLiteAdapter,
 } from './adapters';
-export type { AdapterName, ColumnInfo, ConnectionConfig, ExecResult, Row } from './types';
+export type { AdapterName, ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from './types';
 export {
   clearConnection,
   connectionContext,
@@ -51,3 +61,16 @@ export type {
   IndexOptions,
   TableBuilder,
 } from './schema/types';
+export { defineSchema, loadSchema } from './schema/Schema';
+export type {
+  AddForeignKeyEntry,
+  AddIndexEntry,
+  CreateTableEntry,
+  ExecuteEntry,
+  SchemaBuilder,
+  SchemaDefinition,
+  SchemaEntry,
+} from './schema/Schema';
+export { dumpSchemaSource } from './schema/SchemaDumper';
+export { runCli } from './cli/run';
+export { loadMigrations, findMigrationFiles } from './cli/migrations';

@@ -12,7 +12,7 @@
  */
 
 import { Arel, TreeManager } from '@arelts/arel';
-import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from './types';
+import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from './types';
 
 /** Errors thrown by adapters when the driver isn't installed. */
 export class AdapterUnavailableError extends Error {
@@ -127,6 +127,25 @@ export abstract class ConnectionAdapter {
 
   /** Whether a table exists. */
   abstract tableExists(tableName: string): Promise<boolean>;
+
+  /**
+   * Schema reflection: list all user tables in the current schema/database.
+   * Excludes `schema_migrations`, `ar_internal_metadata`, and any
+   * driver-internal tables.
+   */
+  async tables(): Promise<string[]> {
+    return [];
+  }
+
+  /** Schema reflection: list non-primary-key indexes on a table. */
+  async indexes(_tableName: string): Promise<IndexInfo[]> {
+    return [];
+  }
+
+  /** Schema reflection: list outbound foreign keys defined on a table. */
+  async foreignKeys(_tableName: string): Promise<ForeignKeyInfo[]> {
+    return [];
+  }
 
   /** Adapter-specific identifier quoter. */
   quoteIdentifier(name: string): string {

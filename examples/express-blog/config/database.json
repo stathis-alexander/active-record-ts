@@ -1,0 +1,14 @@
+{
+  "default": {
+    "adapter": "sqlite"
+  },
+  "development": {
+    "database": "tmp/blog_development.sqlite"
+  },
+  "test": {
+    "database": ":memory:"
+  },
+  "production": {
+    "database": "${DB_PATH:-tmp/blog_production.sqlite}"
+  }
+}
