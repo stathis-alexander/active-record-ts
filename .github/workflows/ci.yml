@@ -61,3 +61,53 @@ jobs:
       - name: Test (active-record — unit only, integration tests need a DB)
         run: bun test test/unit
         working-directory: packages/active-record
+
+  integration:
+    name: Integration tests (Postgres + MySQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: arelts_test
+          POSTGRES_USER: arelts
+          POSTGRES_PASSWORD: arelts
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arelts -d arelts_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: arelts_test
+          MYSQL_USER: arelts
+          MYSQL_PASSWORD: arelts
+          MYSQL_ROOT_PASSWORD: arelts_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u arelts -parelts"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      AR_PG_URL: postgres://arelts:arelts@localhost:5432/arelts_test
+      AR_MYSQL_URL: mysql://arelts:arelts@127.0.0.1:3306/arelts_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Integration tests
+        run: bun test test/integration
+        working-directory: packages/active-record
