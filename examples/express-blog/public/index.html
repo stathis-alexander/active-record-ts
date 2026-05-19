@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>express-blog</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #ffffff;
+      --border: #e3e6ea;
+      --text: #1f2329;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --ok: #047857;
+      --err: #b91c1c;
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      margin: 0 0 0.25rem;
+      letter-spacing: -0.01em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin: 0 0 2rem;
+      font-size: 0.9rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.25rem 1rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+
+    .card h2 {
+      font-size: 1.05rem;
+      margin: 0 0 0.75rem;
+      letter-spacing: -0.005em;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin: 0.65rem 0 0.25rem;
+    }
+
+    label.inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-weight: 400;
+      color: var(--text);
+      margin-top: 0.75rem;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input:not([type]),
+    textarea {
+      width: 100%;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      color: inherit;
+      background: #fff;
+      transition: border-color 0.12s, box-shadow 0.12s;
+    }
+
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    textarea { resize: vertical; min-height: 70px; }
+
+    button {
+      margin-top: 0.85rem;
+      padding: 0.55rem 1rem;
+      border: 0;
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status {
+      margin: 0.85rem 0 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+
+    .post {
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .post:last-child { border-bottom: 0; }
+
+    .post-title {
+      font-weight: 600;
+      margin: 0 0 0.15rem;
+    }
+
+    .post-meta {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .post-body {
+      margin: 0;
+      white-space: pre-wrap;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 0.5rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>express-blog</h1>
+    <p class="subtitle">Tiny demo on top of <code>@arelts/active-record</code>.</p>
+
+    <section class="card">
+      <h2>Who are you?</h2>
+      <form id="find-user">
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" required autocomplete="name" />
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="email" />
+        <button type="submit">Find or create</button>
+      </form>
+      <p id="user-status" class="status">Enter your name + email — we'll find your account or create one.</p>
+    </section>
+
+    <section id="new-post-section" class="card" hidden>
+      <h2>New post</h2>
+      <form id="new-post">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" required minlength="3" />
+        <label for="body">Body</label>
+        <textarea id="body" name="body" rows="3"></textarea>
+        <label class="inline"><input type="checkbox" name="published" checked /> Published</label>
+        <div><button type="submit">Create post</button></div>
+      </form>
+      <p id="post-status" class="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>Latest 10 posts</h2>
+      <div id="posts"><p class="empty">Loading…</p></div>
+    </section>
+  </div>
+
+<script>
+let currentUserId = null;
+
+async function refreshPosts() {
+  const res = await fetch('/posts?limit=10');
+  const posts = await res.json();
+  const container = document.getElementById('posts');
+  if (!posts.length) {
+    container.innerHTML = '<p class="empty">No posts yet.</p>';
+    return;
+  }
+  container.innerHTML = posts.map((p) => `
+    <article class="post">
+      <p class="post-title">${escape(p.title)}</p>
+      <p class="post-meta">by user #${p.user_id} · ${new Date(p.created_at).toLocaleString()}</p>
+      <p class="post-body">${escape(p.body ?? '')}</p>
+    </article>
+  `).join('');
+}
+
+function escape(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+document.getElementById('find-user').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const params = new URLSearchParams({ name: fd.get('name'), email: fd.get('email') });
+  const res = await fetch('/users/find?' + params);
+  const status = document.getElementById('user-status');
+  const section = document.getElementById('new-post-section');
+  if (res.ok) {
+    const u = await res.json();
+    currentUserId = u.id;
+    status.className = 'status ok';
+    status.textContent = (u.created ? 'Created' : 'Found') + ' user #' + u.id + ' — ' + u.name + '. You can post below.';
+    section.hidden = false;
+  } else {
+    currentUserId = null;
+    status.className = 'status err';
+    const err = await res.json();
+    status.textContent = 'Error: ' + (err.errors?.join(', ') ?? err.error ?? 'unknown');
+    section.hidden = true;
+  }
+});
+
+document.getElementById('new-post').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!currentUserId) return;
+  const fd = new FormData(e.target);
+  const body = {
+    user_id: currentUserId,
+    title: fd.get('title'),
+    body: fd.get('body'),
+    published: fd.get('published') === 'on',
+  };
+  const res = await fetch('/posts', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const status = document.getElementById('post-status');
+  if (res.ok) {
+    status.className = 'status ok';
+    status.textContent = 'Posted!';
+    e.target.reset();
+    e.target.elements.published.checked = true;
+    refreshPosts();
+  } else {
+    const err = await res.json();
+    status.className = 'status err';
+    status.textContent = 'Error: ' + (err.errors?.join(', ') ?? 'unknown');
+  }
+});
+
+refreshPosts();
+</script>
+</body>
+</html>

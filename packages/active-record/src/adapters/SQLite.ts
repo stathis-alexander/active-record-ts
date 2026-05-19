@@ -5,7 +5,7 @@
 
 import { Arel } from '@arelts/arel';
 import { ConnectionAdapter, TransactionIsolationError, type TransactionOptions } from '../ConnectionAdapter';
-import type { ColumnInfo, ConnectionConfig, ExecResult, Row } from '../types';
+import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from '../types';
 import { resolveLogicalType } from '../ConnectionAdapter';
 
 type SQLiteDatabase = {
@@ -129,5 +129,60 @@ export class SQLiteAdapter extends ConnectionAdapter {
   async primaryKey(tableName: string): Promise<string | null> {
     const cols = await this.columns(tableName);
     return cols.find((c) => c.isPrimaryKey)?.name ?? null;
+  }
+
+  override async tables(): Promise<string[]> {
+    const rows = (await this.execute(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+    )) as Array<{ name: string }>;
+    return rows.map((r) => r.name).filter((n) => n !== 'schema_migrations' && n !== 'ar_internal_metadata');
+  }
+
+  override async indexes(tableName: string): Promise<IndexInfo[]> {
+    const idxRows = (await this.execute(`PRAGMA index_list(${this.quoteIdentifier(tableName)})`)) as Array<{
+      name: string;
+      unique: number;
+      origin: string;
+    }>;
+    const out: IndexInfo[] = [];
+    for (const row of idxRows) {
+      // `origin === 'pk'` is the auto-created primary-key index; skip.
+      if (row.origin === 'pk') continue;
+      // Auto-indexes for UNIQUE constraints start with `sqlite_autoindex_` and
+      // aren't user-named — skip; we recreate them via column constraints.
+      if (row.name.startsWith('sqlite_autoindex_')) continue;
+      const cols = (await this.execute(`PRAGMA index_info(${this.quoteIdentifier(row.name)})`)) as Array<{
+        seqno: number;
+        cid: number;
+        name: string;
+      }>;
+      out.push({
+        name: row.name,
+        columns: cols.sort((a, b) => a.seqno - b.seqno).map((c) => c.name),
+        unique: row.unique === 1,
+      });
+    }
+    return out;
+  }
+
+  override async foreignKeys(tableName: string): Promise<ForeignKeyInfo[]> {
+    const rows = (await this.execute(`PRAGMA foreign_key_list(${this.quoteIdentifier(tableName)})`)) as Array<{
+      id: number;
+      seq: number;
+      table: string;
+      from: string;
+      to: string;
+      on_update: string;
+      on_delete: string;
+    }>;
+    return rows.map((r) => ({
+      name: `fk_${tableName}_${r.from}`,
+      fromTable: tableName,
+      toTable: r.table,
+      column: r.from,
+      primaryKey: r.to,
+      onDelete: r.on_delete && r.on_delete !== 'NO ACTION' ? r.on_delete.toLowerCase().replace(/ /g, '_') : undefined,
+      onUpdate: r.on_update && r.on_update !== 'NO ACTION' ? r.on_update.toLowerCase().replace(/ /g, '_') : undefined,
+    }));
   }
 }

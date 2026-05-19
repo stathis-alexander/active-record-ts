@@ -1,11 +1,14 @@
 {
   "name": "@arelts/active-record",
   "version": "1.0.0",
-  "description": "Rails-style ActiveRecord for TypeScript on top of arel — Postgres, MySQL, and SQLite connection adapters.",
+  "description": "Rails style ActiveRecord in TypeScript",
   "author": "Alexander Stathis <stathis.alexanderj@gmail.com> (github.com/stathis-alexander)",
   "license": "MIT",
   "type": "module",
   "module": "src/index.ts",
+  "bin": {
+    "active-record": "./bin/active-record.ts"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -28,6 +31,12 @@
     "test": "bun test",
     "test:unit": "bun test test/unit",
     "test:integration": "bun test test/integration",
-    "typecheck": "bun tsc --noEmit"
+    "typecheck": "bun tsc --noEmit",
+    "db:create": "bun bin/active-record.ts db:create",
+    "db:drop": "bun bin/active-record.ts db:drop",
+    "db:migrate": "bun bin/active-record.ts db:migrate",
+    "db:rollback": "bun bin/active-record.ts db:rollback",
+    "db:schema:dump": "bun bin/active-record.ts db:schema:dump",
+    "db:schema:load": "bun bin/active-record.ts db:schema:load"
   }
 }
