@@ -15,7 +15,7 @@ import type { Base, BaseConstructor } from '../Base';
 import type { AssociationReflection } from './types';
 
 /** Symbol marker for the per-instance association cache populated by Preloader. */
-export const ASSOCIATION_CACHE = Symbol.for('@arelts/active-record:associationCache');
+export const ASSOCIATION_CACHE = Symbol.for('@active-record-ts/active-record:associationCache');
 
 type AssociationCache = Map<string, Base | Base[] | null>;
 

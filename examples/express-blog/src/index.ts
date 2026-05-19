@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { RecordInvalid, RecordNotFound } from '@arelts/active-record';
+import { RecordInvalid, RecordNotFound } from '@active-record-ts/active-record';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { setupDatabase } from './db';
 import { Post, User } from './models';

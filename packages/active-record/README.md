@@ -1,13 +1,13 @@
-# `@arelts/active-record`
+# `@active-record-ts/active-record`
 
 A TypeScript port of Rails' [`ActiveRecord`](https://github.com/rails/rails/tree/main/activerecord). Subclass `Base`, point it at a database, get a chainable `Relation` API plus persistence, callbacks, associations, and migrations.
 
-Built on [`@arelts/arel`](../arel) for SQL generation and [`@arelts/active-model`](../active-model) for attributes, dirty tracking, validations, and callbacks.
+Built on [`@active-record-ts/arel`](../arel) for SQL generation and [`@active-record-ts/active-model`](../active-model) for attributes, dirty tracking, validations, and callbacks.
 
 ## Install
 
 ```bash
-bun add @arelts/active-record
+bun add @active-record-ts/active-record
 # pick a driver:
 bun add postgres        # postgres
 bun add mysql2          # mysql
@@ -17,7 +17,7 @@ bun add mysql2          # mysql
 ## Quickstart
 
 ```ts
-import { Base } from '@arelts/active-record';
+import { Base } from '@active-record-ts/active-record';
 
 class User extends Base {
   static override tableName = 'users';
@@ -179,7 +179,7 @@ await User.transaction(async () => { /* ... */ }, { isolation: 'serializable' })
 ### Migrations
 
 ```ts
-import { Migration, Migrator } from '@arelts/active-record';
+import { Migration, Migrator } from '@active-record-ts/active-record';
 
 class CreateUsers extends Migration {
   static override version = '20260101000001';

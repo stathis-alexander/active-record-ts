@@ -6,7 +6,7 @@
 
 import type { AssociationReflection } from './types';
 
-const KEY = Symbol.for('@arelts/active-record:associations');
+const KEY = Symbol.for('@active-record-ts/active-record:associations');
 
 // biome-ignore lint/suspicious/noExplicitAny: registry attached to constructor
 type Ctor = any;

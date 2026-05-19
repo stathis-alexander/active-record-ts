@@ -47,7 +47,7 @@ export class HaltError extends Error {
  * Rails' `throw :abort` semantics. The chain swallows it and treats it
  * as a `false` return from a `before_*` callback.
  */
-export const ABORT_SENTINEL = Symbol.for('@arelts/active-model:abort');
+export const ABORT_SENTINEL = Symbol.for('@active-record-ts/active-model:abort');
 
 /** Convenience helper for chain implementations: convert "throw :abort" to a clean halt. */
 export const throwAbort = (): never => {

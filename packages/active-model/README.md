@@ -1,13 +1,13 @@
-# `@arelts/active-model`
+# `@active-record-ts/active-model`
 
 Typed attributes, dirty tracking, validations, and callbacks for plain TypeScript classes — no database. A port of Rails' [`ActiveModel`](https://github.com/rails/rails/tree/main/activemodel).
 
-Used by [`@arelts/active-record`](../active-record) for persistence; usable on its own for form objects, API payloads, etc.
+Used by [`@active-record-ts/active-record`](../active-record) for persistence; usable on its own for form objects, API payloads, etc.
 
 ## Usage
 
 ```ts
-import { Model } from '@arelts/active-model';
+import { Model } from '@active-record-ts/active-model';
 
 class Signup extends Model {
   declare email: string;

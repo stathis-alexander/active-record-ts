@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { Arel } from '@arelts/arel';
+import { Arel } from '@active-record-ts/arel';
 import { SQLiteAdapter } from '../../src';
 
 let adapter: SQLiteAdapter;

@@ -24,7 +24,7 @@ const reset = () => {
   // Reset the per-class validator list. We don't have `clear_validators!`
   // as a public API, so reach into the registry symbol used by Model.
   // biome-ignore lint/suspicious/noExplicitAny: registry inspection for test teardown
-  const reg = (Topic as any)[Symbol.for('@arelts/active-model:registry')];
+  const reg = (Topic as any)[Symbol.for('@active-record-ts/active-model:registry')];
   if (reg) reg.validators.length = 0;
 };
 

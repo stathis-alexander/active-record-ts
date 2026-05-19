@@ -6,7 +6,7 @@
  * and shares schema reflection with this adapter.
  */
 
-import { Arel } from '@arelts/arel';
+import { Arel } from '@active-record-ts/arel';
 import { ConnectionAdapter, AdapterUnavailableError, isolationLevelSql, type TransactionOptions } from '../ConnectionAdapter';
 import { resolveLogicalType } from '../ConnectionAdapter';
 import type { ColumnInfo, ConnectionConfig, ExecResult, ForeignKeyInfo, IndexInfo, Row } from '../types';

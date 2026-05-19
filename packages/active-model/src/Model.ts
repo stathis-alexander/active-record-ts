@@ -52,7 +52,7 @@ const resolveType = (ref: TypeRef): Type => (typeof ref === 'string' ? lookupTyp
  * enumerable property keyed by a symbol so it doesn't leak into the
  * subclass shape — but discoverable from any prototype.
  */
-const REGISTRY = Symbol.for('@arelts/active-model:registry');
+const REGISTRY = Symbol.for('@active-record-ts/active-model:registry');
 
 type Registry<T extends Model> = {
   attributeSet: AttributeSet;

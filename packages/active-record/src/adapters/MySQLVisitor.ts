@@ -5,7 +5,7 @@
  * consistency with its test suite, so we adapt to the real driver here.
  */
 
-import { MySQL as ArelMySQL } from '@arelts/arel';
+import { MySQL as ArelMySQL } from '@active-record-ts/arel';
 
 export class MySQLAdapterVisitor extends ArelMySQL {
   protected override quoteIdentifier(name: string): string {

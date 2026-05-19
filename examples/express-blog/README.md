@@ -1,6 +1,6 @@
 # express-blog
 
-End-to-end Express app on top of `@arelts/active-record`. A small blog API with users, posts, validations, callbacks, associations, transactions, and migrations against in-memory SQLite.
+End-to-end Express app on top of `@active-record-ts/active-record`. A small blog API with users, posts, validations, callbacks, associations, transactions, and migrations against in-memory SQLite.
 
 ## Run
 

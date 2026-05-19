@@ -20,9 +20,9 @@
  *   - validations / callbacks: inherited from `Model` (active-model).
  */
 
-import { Arel, Nodes as ArelNodes } from '@arelts/arel';
-import type { Attribute as ArelAttribute, BindParamNode } from '@arelts/arel';
-import { Model, lookupType, tableize, type Type, type TypeRef } from '@arelts/active-model';
+import { Arel, Nodes as ArelNodes } from '@active-record-ts/arel';
+import type { Attribute as ArelAttribute, BindParamNode } from '@active-record-ts/arel';
+import { Model, lookupType, tableize, type Type, type TypeRef } from '@active-record-ts/active-model';
 import { Rollback, type ConnectionAdapter, type TransactionOptions } from './ConnectionAdapter';
 import { connectionContext, setRoleConnection, setDatabaseConnection, type ConnectionContext } from './connection';
 import { getConnection, setConnection } from './connection';
@@ -39,7 +39,7 @@ import {
   type HasManyOptions,
   type HasOneOptions,
 } from './associations';
-import { pluralize } from '@arelts/active-model';
+import { pluralize } from '@active-record-ts/active-model';
 
 /** Thrown when `save!` fails validation. */
 export class RecordInvalid extends Error {
@@ -124,7 +124,7 @@ const camelizeMethodSuffix = (name: string): string =>
  * resolved on demand via a generic intercept stored in a class-side
  * map of `attributeName → original` snake-case form.
  */
-const DYNAMIC_FINDER_NAMES = Symbol.for('@arelts/active-record:dynamicFinderAttrs');
+const DYNAMIC_FINDER_NAMES = Symbol.for('@active-record-ts/active-record:dynamicFinderAttrs');
 
 const defineDynamicFinders = (ctor: typeof Base, attribute: string): void => {
   // Track all known attribute names for use by multi-attribute lookups.
@@ -240,15 +240,15 @@ const primaryKeyConditions = (ctor: typeof Base, record: Base): Record<string, u
  * Build an arel WHERE expression that matches the record's primary key —
  * AND-joined across every PK column for composite primary keys.
  */
-const primaryKeyMatcher = (ctor: typeof Base, table: Arel.Table, record: Base): import('@arelts/arel').Expression => {
+const primaryKeyMatcher = (ctor: typeof Base, table: Arel.Table, record: Base): import('@active-record-ts/arel').Expression => {
   const cols = ctor.primaryKeyColumns();
   const equalities = cols.map((col) =>
     table.attribute(col).equal(new ArelNodes.BindParam(record.readAttribute(col) as never)),
   );
-  if (equalities.length === 1) return equalities[0]! as import('@arelts/arel').Expression;
-  let combined = equalities[0]! as unknown as import('@arelts/arel').Expression;
+  if (equalities.length === 1) return equalities[0]! as import('@active-record-ts/arel').Expression;
+  let combined = equalities[0]! as unknown as import('@active-record-ts/arel').Expression;
   for (let i = 1; i < equalities.length; i++) {
-    combined = new ArelNodes.And([combined, equalities[i]! as unknown as import('@arelts/arel').Expression]) as unknown as import('@arelts/arel').Expression;
+    combined = new ArelNodes.And([combined, equalities[i]! as unknown as import('@active-record-ts/arel').Expression]) as unknown as import('@active-record-ts/arel').Expression;
   }
   return combined;
 };
@@ -380,7 +380,7 @@ const enqueueOnRollback = (fn: () => Promise<void> | void): void => {
 };
 
 /** Symbol key for cached per-class state attached to constructors. */
-const ARSTATE = Symbol.for('@arelts/active-record:state');
+const ARSTATE = Symbol.for('@active-record-ts/active-record:state');
 
 type ClassState = {
   arelTable: Arel.Table | null;

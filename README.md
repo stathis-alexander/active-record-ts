@@ -19,7 +19,7 @@ That's the whole setup — no generator to run, no `.prisma` / `.sql` files to k
 ## Create, find, save
 
 ```ts
-import { Base } from '@arelts/active-record';
+import { Base } from '@active-record-ts/active-record';
 
 class User extends Base {
   static override tableName = 'users';
@@ -73,9 +73,9 @@ Three packages in this monorepo:
 
 | Package | Role |
 | ------- | ---- |
-| [`@arelts/arel`](packages/arel) | Relational-algebra query builder. Builds SQL ASTs, emits dialect-specific strings. |
-| [`@arelts/active-model`](packages/active-model) | Typed attributes, dirty tracking, validations, callbacks. No persistence. |
-| [`@arelts/active-record`](packages/active-record) | `Base` class, relations, associations, migrations, connection adapters (Postgres, MySQL, SQLite). |
+| [`@active-record-ts/arel`](packages/arel) | Relational-algebra query builder. Builds SQL ASTs, emits dialect-specific strings. |
+| [`@active-record-ts/active-model`](packages/active-model) | Typed attributes, dirty tracking, validations, callbacks. No persistence. |
+| [`@active-record-ts/active-record`](packages/active-record) | `Base` class, relations, associations, migrations, connection adapters (Postgres, MySQL, SQLite). |
 
 See [`examples/express-blog`](examples/express-blog) for an end-to-end Express app.
 

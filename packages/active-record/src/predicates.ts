@@ -7,8 +7,8 @@
  *   - any arel `Expression` — used as-is
  */
 
-import { Arel, Nodes as ArelNodes } from '@arelts/arel';
-import type { Expression, BindValue } from '@arelts/arel';
+import { Arel, Nodes as ArelNodes } from '@active-record-ts/arel';
+import type { Expression, BindValue } from '@active-record-ts/arel';
 import { Base, type BaseConstructor } from './Base';
 import { lookupAssociation } from './associations/registry';
 
@@ -51,7 +51,7 @@ const buildPredicateInner = <T extends Base>(klass: BaseConstructor<T>, input: W
   for (const [name, raw] of Object.entries(input as Record<string, unknown>)) {
     // Sugar: `Post.where({ user: someUser })` resolves to
     // `WHERE user_id = someUser.id` when the association is declared.
-    if (raw instanceof Base && Object.prototype.hasOwnProperty.call(klass, Symbol.for('@arelts/active-record:associations'))) {
+    if (raw instanceof Base && Object.prototype.hasOwnProperty.call(klass, Symbol.for('@active-record-ts/active-record:associations'))) {
       // Skip — handled below by the reflection lookup.
     }
     const reflection = isBaseRecord(raw) ? lookupAssociation(klass, name) : null;

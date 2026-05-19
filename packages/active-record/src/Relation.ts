@@ -8,8 +8,8 @@
  * is executed.
  */
 
-import { Arel, Nodes as ArelNodes } from '@arelts/arel';
-import type { Attribute, Expression, SelectManager } from '@arelts/arel';
+import { Arel, Nodes as ArelNodes } from '@active-record-ts/arel';
+import type { Attribute, Expression, SelectManager } from '@active-record-ts/arel';
 import { lookupAssociation } from './associations/registry';
 import { preloadAssociation } from './associations/Preloader';
 
